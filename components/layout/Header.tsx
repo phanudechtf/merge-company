@@ -135,7 +135,7 @@ export function Header({ title, breadcrumbs = [], onRefresh, onExport }: HeaderP
         </button>
         <div className="min-w-0">
           <div className="hidden sm:flex items-center gap-1 text-xs text-slate-400 mb-0.5">
-            <span>MERGE HR Suite</span>
+            <span>MERGE Workspace</span>
             {breadcrumbs.map((crumb) => (
               <span key={crumb} className="flex items-center gap-1">
                 <ChevronRight size={11} />

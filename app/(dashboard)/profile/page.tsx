@@ -23,10 +23,10 @@ const kindStyle: Record<MyNotiKind, { icon: React.ReactNode; bg: string; label: 
 };
 
 const statusLabel: Record<string, { label: string; cls: string }> = {
-  backlog:          { label: "Backlog",          cls: "bg-slate-100 text-slate-600" },
-  pending_approval: { label: "รออนุมัติ",         cls: "bg-amber-100 text-amber-700" },
-  approved:         { label: "อนุมัติแล้ว",        cls: "bg-blue-100 text-blue-700" },
-  in_progress:      { label: "กำลังทำ",           cls: "bg-gold-100 text-gold-700" },
+  backlog:     { label: "Backlog",   cls: "bg-slate-100 text-slate-600" },
+  in_progress: { label: "กำลังทำ",   cls: "bg-gold-100 text-gold-700" },
+  done:        { label: "เสร็จสิ้น", cls: "bg-emerald-100 text-emerald-700" },
+  cancelled:   { label: "ยกเลิก",    cls: "bg-slate-100 text-slate-500" },
 };
 
 const priorityLabel: Record<string, { label: string; cls: string }> = {

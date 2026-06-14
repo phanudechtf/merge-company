@@ -358,7 +358,7 @@ export const storeTeam: Record<string, { name: string; role: string }[]> = {
   ],
 };
 
-// ===== Warehouse layout (3D view) — racks in storage zones A/B, 3 levels each =====
+// ===== Warehouse layout (3D view) — tall racks in storage zones A/B, 6 levels each =====
 export interface RackSlot {
   sku: string;
   name: string;
@@ -381,6 +381,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 64 }],
       [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 50 }],
       [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 38 }],
+      [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 130 }],
+      [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 110 }],
+      [{ sku: "MRG-DNM-003", name: "Cropped Denim Jacket", category: "เดนิม", qty: 80 }],
     ],
   },
   {
@@ -389,6 +392,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 48 }],
       [{ sku: "MRG-DNM-003", name: "Cropped Denim Jacket", category: "เดนิม", qty: 24 }],
       [],
+      [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 90 }],
+      [{ sku: "MRG-DNM-003", name: "Cropped Denim Jacket", category: "เดนิม", qty: 60 }],
+      [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 100 }],
     ],
   },
   {
@@ -397,6 +403,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-WMN-010", name: "Silk Slip Dress", category: "สตรี", qty: 36 }],
       [{ sku: "MRG-WMN-010", name: "Silk Slip Dress", category: "สตรี", qty: 22 }],
       [{ sku: "MRG-WMN-012", name: "Tailored Wide Trousers", category: "สตรี", qty: 40 }],
+      [{ sku: "MRG-WMN-010", name: "Silk Slip Dress", category: "สตรี", qty: 80 }],
+      [{ sku: "MRG-WMN-012", name: "Tailored Wide Trousers", category: "สตรี", qty: 75 }],
+      [{ sku: "MRG-WMN-013", name: "Oversized Knit Sweater", category: "สตรี", qty: 88 }],
     ],
   },
   {
@@ -405,6 +414,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-WMN-012", name: "Tailored Wide Trousers", category: "สตรี", qty: 54 }],
       [{ sku: "MRG-WMN-013", name: "Oversized Knit Sweater", category: "สตรี", qty: 96 }],
       [{ sku: "MRG-WMN-013", name: "Oversized Knit Sweater", category: "สตรี", qty: 92 }],
+      [{ sku: "MRG-WMN-012", name: "Tailored Wide Trousers", category: "สตรี", qty: 120 }],
+      [{ sku: "MRG-WMN-013", name: "Oversized Knit Sweater", category: "สตรี", qty: 140 }],
+      [{ sku: "MRG-WMN-011", name: "Linen Wrap Blouse", category: "สตรี", qty: 60 }],
     ],
   },
   {
@@ -413,6 +425,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [],
       [{ sku: "MRG-WMN-011", name: "Linen Wrap Blouse", category: "สตรี", qty: 0 }],
       [],
+      [{ sku: "MRG-WMN-011", name: "Linen Wrap Blouse", category: "สตรี", qty: 45 }],
+      [],
+      [{ sku: "MRG-WMN-010", name: "Silk Slip Dress", category: "สตรี", qty: 30 }],
     ],
   },
   {
@@ -421,6 +436,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 28 }],
       [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 18 }],
       [{ sku: "MRG-DNM-003", name: "Cropped Denim Jacket", category: "เดนิม", qty: 12 }],
+      [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 16 }],
+      [],
+      [{ sku: "MRG-DNM-002", name: "Wide-Leg Raw Denim", category: "เดนิม", qty: 8 }],
     ],
   },
   {
@@ -429,6 +447,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 32 }],
       [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 120 }],
       [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 90 }],
+      [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 70 }],
+      [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 200 }],
+      [{ sku: "MRG-ACC-022", name: "Woven Belt", category: "Accessories", qty: 64 }],
     ],
   },
   {
@@ -437,6 +458,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-ACC-022", name: "Woven Belt", category: "Accessories", qty: 18 }],
       [],
       [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 14 }],
+      [{ sku: "MRG-ACC-022", name: "Woven Belt", category: "Accessories", qty: 80 }],
+      [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 50 }],
+      [],
     ],
   },
   {
@@ -445,6 +469,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-LIF-030", name: "Scented Candle — Noir", category: "Lifestyle", qty: 60 }],
       [{ sku: "MRG-LIF-030", name: "Scented Candle — Noir", category: "Lifestyle", qty: 60 }],
       [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 44 }],
+      [{ sku: "MRG-LIF-030", name: "Scented Candle — Noir", category: "Lifestyle", qty: 120 }],
+      [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 96 }],
+      [{ sku: "MRG-LIF-030", name: "Scented Candle — Noir", category: "Lifestyle", qty: 75 }],
     ],
   },
   {
@@ -453,6 +480,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 32 }],
       [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 54 }],
       [],
+      [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 88 }],
+      [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 110 }],
+      [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 40 }],
     ],
   },
   {
@@ -461,6 +491,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [{ sku: "MRG-WMN-010", name: "Silk Slip Dress", category: "สตรี", qty: 20 }],
       [{ sku: "MRG-DNM-001", name: "High-Rise Slim Jeans", category: "เดนิม", qty: 30 }],
       [{ sku: "MRG-LIF-030", name: "Scented Candle — Noir", category: "Lifestyle", qty: 24 }],
+      [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 60 }],
+      [{ sku: "MRG-ACC-022", name: "Woven Belt", category: "Accessories", qty: 44 }],
+      [{ sku: "MRG-ACC-021", name: "Gold Hoop Earrings", category: "Accessories", qty: 70 }],
     ],
   },
   {
@@ -469,6 +502,9 @@ export const warehouseRacks: WarehouseRack[] = [
       [],
       [],
       [{ sku: "MRG-ACC-022", name: "Woven Belt", category: "Accessories", qty: 8 }],
+      [{ sku: "MRG-ACC-020", name: "Leather Mini Bag", category: "Accessories", qty: 12 }],
+      [],
+      [{ sku: "MRG-LIF-031", name: "Canvas Tote", category: "Lifestyle", qty: 16 }],
     ],
   },
 ];

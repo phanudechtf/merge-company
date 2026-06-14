@@ -81,7 +81,7 @@ export function getMyNotifications(userId: string): MyNotification[] {
       (w) =>
         w.assigneeIds.includes(userId) &&
         w.requesterId !== userId &&
-        !["done", "rejected", "cancelled"].includes(w.status)
+        !["done", "cancelled"].includes(w.status)
     )
     .map((w) => ({
       id: `as-${w.id}`,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Plus, Search, ArrowLeft, ClipboardList, Loader2, ChevronDown, AlertTriangle, Timer, CheckCircle2, UserCircle2 } from "lucide-react";
+import { Plus, Search, ArrowLeft, ClipboardList, Loader2, ChevronDown, AlertTriangle, PlayCircle, CheckCircle2, UserCircle2 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { WorkOrderCard } from "@/components/hr/WorkOrderCard";
 import { WorkOrderModal } from "@/components/hr/WorkOrderModal";
@@ -27,7 +27,6 @@ const COLUMNS: {
   countBg: string;
 }[] = [
   { key: "backlog",          label: "Backlog",          dotColor: "bg-slate-400",   headerBg: "bg-slate-50",    borderColor: "border-slate-200",   countBg: "bg-slate-200 text-slate-700" },
-  { key: "pending_approval", label: "รอ Approve",       dotColor: "bg-amber-400",   headerBg: "bg-amber-50",    borderColor: "border-amber-200",   countBg: "bg-amber-100 text-amber-700" },
   { key: "in_progress",      label: "กำลังดำเนินการ",  dotColor: "bg-gold-500",  headerBg: "bg-gold-50",   borderColor: "border-gold-200",  countBg: "bg-gold-100 text-gold-700" },
   { key: "done",             label: "เสร็จสิ้น",        dotColor: "bg-emerald-500", headerBg: "bg-emerald-50",  borderColor: "border-emerald-200", countBg: "bg-emerald-100 text-emerald-700" },
 ];
@@ -42,15 +41,13 @@ const deptAccent: Record<string, string> = {
 };
 
 function isOverdue(dueDate: string, status: WorkOrderStatus) {
-  if (status === "done" || status === "cancelled" || status === "rejected") return false;
+  if (status === "done" || status === "cancelled") return false;
   return new Date(dueDate) < new Date();
 }
 
 const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
-// คอลัมน์ "กำลังดำเนินการ" รวมงานที่ approved แล้ว (กดเริ่มได้) ไว้ด้วย ไม่ให้ตกหล่น
 function statusInColumn(status: WorkOrderStatus, colKey: WorkOrderStatus) {
-  if (colKey === "in_progress") return status === "in_progress" || status === "approved";
   return status === colKey;
 }
 
@@ -89,10 +86,6 @@ export default function DeptWorkOrdersPage() {
   const [deleteTarget, setDeleteTarget] = useState<WorkOrder | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectTarget, setRejectTarget] = useState<WorkOrder | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<WorkOrderStatus | null>(null);
   const [showRejected, setShowRejected] = useState(false);
@@ -154,20 +147,11 @@ export default function DeptWorkOrdersPage() {
   const kpi = useMemo(() => ({
     total: scoped.length,
     backlog: scoped.filter((w) => w.status === "backlog").length,
-    pending: scoped.filter((w) => w.status === "pending_approval").length,
-    inProgress: scoped.filter((w) => w.status === "in_progress" || w.status === "approved").length,
+    inProgress: scoped.filter((w) => w.status === "in_progress").length,
+    done: scoped.filter((w) => w.status === "done").length,
     overdue: scoped.filter((w) => isOverdue(w.dueDate, w.status)).length,
-    urgent: scoped.filter((w) => w.priority === "urgent" && w.status !== "done" && w.status !== "rejected").length,
+    urgent: scoped.filter((w) => w.priority === "urgent" && w.status !== "done" && w.status !== "cancelled").length,
   }), [scoped]);
-
-  const handleApprove = useCallback(async (wo: WorkOrder) => {
-    const res = await fetch(`/api/work-orders/${wo.id}/approve`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approverId: currentUserId }),
-    });
-    if (res.ok) { toast("อนุมัติงานแล้ว"); fetchData(); }
-    else toast("เกิดข้อผิดพลาด", "error");
-  }, [fetchData, toast, currentUserId]);
 
   const handleStatusChange = useCallback(async (wo: WorkOrder, status: WorkOrderStatus) => {
     const statusMsg: Record<string, string> = {
@@ -185,13 +169,8 @@ export default function DeptWorkOrdersPage() {
 
   const handleMove = useCallback(async (wo: WorkOrder, targetStatus: WorkOrderStatus) => {
     if (wo.status === targetStatus) return;
-    if (wo.status === "pending_approval" && targetStatus === "in_progress") {
-      await handleApprove(wo);
-      await handleStatusChange({ ...wo, status: "approved" }, "in_progress");
-    } else {
-      await handleStatusChange(wo, targetStatus);
-    }
-  }, [handleApprove, handleStatusChange]);
+    await handleStatusChange(wo, targetStatus);
+  }, [handleStatusChange]);
 
   const handleDrop = useCallback(async (targetStatus: WorkOrderStatus) => {
     if (!draggedId) { setDragOverCol(null); return; }
@@ -199,16 +178,6 @@ export default function DeptWorkOrdersPage() {
     if (wo) await handleMove(wo, targetStatus);
     setDraggedId(null); setDragOverCol(null);
   }, [draggedId, workOrders, handleMove]);
-
-  const handleRejectSubmit = async () => {
-    if (!rejectTarget) return;
-    const res = await fetch(`/api/work-orders/${rejectTarget.id}/reject`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approverId: currentUserId, reason: rejectReason || "ไม่ระบุเหตุผล" }),
-    });
-    if (res.ok) toast("ปฏิเสธงานแล้ว", "warning");
-    setRejectOpen(false); setRejectTarget(null); setRejectReason(""); fetchData();
-  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -224,7 +193,7 @@ export default function DeptWorkOrdersPage() {
 
   const accentDot = dept ? (deptAccent[dept.id] ?? "bg-slate-400") : "bg-gold-500";
   const pageTitle = isAll ? "งานทั้งหมด" : isMe ? "งานของฉัน" : (dept?.name ?? "แผนก");
-  const rejectedCards = filtered.filter((w) => w.status === "rejected" || w.status === "cancelled");
+  const cancelledCards = filtered.filter((w) => w.status === "cancelled");
 
   const selectClass = "h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-500";
 
@@ -268,8 +237,8 @@ export default function DeptWorkOrdersPage() {
             {[
               { label: "ทั้งหมด",     value: kpi.total,      icon: <ClipboardList size={14} />, color: "text-slate-600", bg: "bg-slate-100" },
               { label: "Backlog",     value: kpi.backlog,    icon: <ClipboardList size={14} />, color: "text-slate-500", bg: "bg-slate-100" },
-              { label: "รอ Approve",  value: kpi.pending,    icon: <Timer size={14} />,         color: "text-amber-600", bg: "bg-amber-50" },
-              { label: "กำลังทำ",    value: kpi.inProgress, icon: <CheckCircle2 size={14} />,  color: "text-gold-600",bg: "bg-gold-50" },
+              { label: "กำลังทำ",    value: kpi.inProgress, icon: <PlayCircle size={14} />,    color: "text-gold-600",bg: "bg-gold-50" },
+              { label: "เสร็จสิ้น",   value: kpi.done,       icon: <CheckCircle2 size={14} />,  color: "text-emerald-600",bg: "bg-emerald-50" },
               { label: "เกินกำหนด",  value: kpi.overdue,    icon: <AlertTriangle size={14} />, color: "text-red-600",   bg: "bg-red-50",   highlight: kpi.overdue > 0 },
               { label: "ด่วน",        value: kpi.urgent,     icon: <AlertTriangle size={14} />, color: "text-orange-600",bg: "bg-orange-50",highlight: kpi.urgent > 0 },
             ].map((c) => (
@@ -417,8 +386,6 @@ export default function DeptWorkOrdersPage() {
                             onView={(w) => setDetailTarget(w)}
                             onEdit={(w) => { setEditTarget(w); setModalOpen(true); }}
                             onDelete={(w) => { setDeleteTarget(w); setDeleteOpen(true); }}
-                            onApprove={handleApprove}
-                            onReject={(w) => { setRejectTarget(w); setRejectOpen(true); }}
                             onStatusChange={handleStatusChange}
                             onMove={handleMove}
                             isMine={(wo.assigneeIds ?? []).includes(currentUserId)}
@@ -431,17 +398,17 @@ export default function DeptWorkOrdersPage() {
               })}
             </div>
 
-            {/* Rejected section */}
-            {rejectedCards.length > 0 && (
+            {/* Cancelled section */}
+            {cancelledCards.length > 0 && (
               <div className="mt-4">
                 <button onClick={() => setShowRejected(!showRejected)}
                   className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-600 transition-colors mb-2">
                   <ChevronDown size={14} className={cn("transition-transform", showRejected && "rotate-180")} />
-                  ถูกปฏิเสธ / ยกเลิก ({rejectedCards.length})
+                  ยกเลิก ({cancelledCards.length})
                 </button>
                 {showRejected && (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {rejectedCards.map((wo) => (
+                    {cancelledCards.map((wo) => (
                       <WorkOrderCard key={wo.id} wo={wo}
                         onView={(w) => setDetailTarget(w)}
                         onEdit={(w) => { setEditTarget(w); setModalOpen(true); }}
@@ -474,25 +441,6 @@ export default function DeptWorkOrdersPage() {
           onClose={() => setDetailTarget(null)}
           onEdit={(w) => { setDetailTarget(null); setEditTarget(w); setModalOpen(true); }}
         />
-      )}
-
-      {rejectOpen && rejectTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setRejectOpen(false)} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h2 className="text-base font-bold text-slate-900 mb-1">ปฏิเสธงาน</h2>
-            <p className="text-xs text-slate-500 mb-4">{rejectTarget.code}: {rejectTarget.title}</p>
-            <div className="space-y-1.5 mb-4">
-              <label className="text-sm font-medium text-slate-700">เหตุผล</label>
-              <textarea className="w-full rounded-md border border-slate-200 p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gold-500"
-                rows={3} placeholder="ระบุเหตุผล..." value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => { setRejectOpen(false); setRejectTarget(null); }}>ยกเลิก</Button>
-              <Button variant="destructive" className="flex-1" onClick={handleRejectSubmit}>ปฏิเสธงาน</Button>
-            </div>
-          </div>
-        </div>
       )}
 
       <DeleteConfirmModal

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, Pencil, Trash2, Clock, CheckCircle2, XCircle, PlayCircle, ArrowRight, ArrowRightLeft, Paperclip } from "lucide-react";
+import { Eye, Pencil, Trash2, Clock, CheckCircle2, PlayCircle, ArrowRight, ArrowRightLeft, Paperclip, Flame, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
@@ -12,8 +12,6 @@ interface WorkOrderCardProps {
   onView: (w: WorkOrder) => void;
   onEdit: (w: WorkOrder) => void;
   onDelete: (w: WorkOrder) => void;
-  onApprove?: (w: WorkOrder) => void;
-  onReject?: (w: WorkOrder) => void;
   onStatusChange?: (w: WorkOrder, status: WorkOrderStatus) => void;
   onMove?: (w: WorkOrder, status: WorkOrderStatus) => void;
   isMine?: boolean;
@@ -21,7 +19,6 @@ interface WorkOrderCardProps {
 
 const moveOptions: { key: WorkOrderStatus; label: string }[] = [
   { key: "backlog", label: "Backlog" },
-  { key: "pending_approval", label: "รอ Approve" },
   { key: "in_progress", label: "กำลังดำเนินการ" },
   { key: "done", label: "เสร็จสิ้น" },
 ];
@@ -34,24 +31,35 @@ const priorityConfig = {
 };
 
 const statusConfig: Record<WorkOrderStatus, { label: string; variant: "default" | "success" | "warning" | "destructive" | "recruiting" | "outline" }> = {
-  backlog:          { label: "Backlog",        variant: "outline" },
-  pending_approval: { label: "รอ Approve",     variant: "warning" },
-  approved:         { label: "Approved",       variant: "recruiting" },
-  in_progress:      { label: "กำลังดำเนินการ", variant: "default" },
-  done:             { label: "เสร็จสิ้น",      variant: "success" },
-  rejected:         { label: "ถูกปฏิเสธ",     variant: "destructive" },
-  cancelled:        { label: "ยกเลิก",         variant: "outline" },
+  backlog:     { label: "Backlog",        variant: "outline" },
+  in_progress: { label: "กำลังดำเนินการ", variant: "default" },
+  done:        { label: "เสร็จสิ้น",      variant: "success" },
+  cancelled:   { label: "ยกเลิก",         variant: "outline" },
 };
 
-function isOverdue(dueDate: string, status: WorkOrderStatus) {
-  if (status === "done" || status === "cancelled" || status === "rejected") return false;
-  return new Date(dueDate) < new Date();
+const DUE_SOON_DAYS = 3;
+
+function dueInfo(dueDate: string, status: WorkOrderStatus) {
+  if (status === "done" || status === "cancelled") {
+    return { overdue: false, dueSoon: false, days: 0 };
+  }
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate); due.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - now.getTime()) / 86_400_000);
+  return { overdue: days < 0, dueSoon: days >= 0 && days <= DUE_SOON_DAYS, days };
 }
 
-export function WorkOrderCard({ wo, onView, onEdit, onDelete, onApprove, onReject, onStatusChange, onMove, isMine }: WorkOrderCardProps) {
+function dueLabel(days: number) {
+  if (days < 0) return `เกิน ${Math.abs(days)} วัน`;
+  if (days === 0) return "ครบกำหนดวันนี้";
+  if (days === 1) return "พรุ่งนี้";
+  return `อีก ${days} วัน`;
+}
+
+export function WorkOrderCard({ wo, onView, onEdit, onDelete, onStatusChange, onMove, isMine }: WorkOrderCardProps) {
   const priority = priorityConfig[wo.priority];
   const status = statusConfig[wo.status];
-  const overdue = isOverdue(wo.dueDate, wo.status);
+  const { overdue, dueSoon, days } = dueInfo(wo.dueDate, wo.status);
   const displayAssignees = wo.assignees ?? [];
   const attachCount = wo.attachments?.length ?? 0;
   const [moveOpen, setMoveOpen] = useState(false);
@@ -59,7 +67,13 @@ export function WorkOrderCard({ wo, onView, onEdit, onDelete, onApprove, onRejec
   return (
     <div className={cn(
       "bg-white rounded-xl border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 overflow-hidden flex flex-col",
-      isMine ? "border-gold-300 ring-2 ring-gold-200" : "border-slate-200"
+      wo.priority === "urgent"
+        ? "relative z-10 border-2 border-red-400 animate-flame-glow"
+        : overdue
+        ? "relative z-10 border-2 border-red-300 animate-overdue-pulse"
+        : dueSoon
+        ? "border-2 border-orange-300 animate-due-pulse"
+        : isMine ? "border-gold-300 ring-2 ring-gold-200" : "border-slate-200"
     )}>
       {/* Priority bar */}
       <div className={cn("h-1 w-full", priority.bar)} />
@@ -76,7 +90,8 @@ export function WorkOrderCard({ wo, onView, onEdit, onDelete, onApprove, onRejec
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
             <Badge variant={status.variant}>{status.label}</Badge>
-            <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", priority.badge)}>
+            <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded", priority.badge)}>
+              {wo.priority === "urgent" && <Flame size={11} className="animate-flame text-red-500 fill-red-500/30" />}
               {priority.label}
             </span>
           </div>
@@ -121,10 +136,14 @@ export function WorkOrderCard({ wo, onView, onEdit, onDelete, onApprove, onRejec
         </div>
 
         {/* Due date */}
-        <div className={cn("flex items-center gap-1.5 text-xs", overdue ? "text-red-500 font-medium" : "text-slate-500")}>
+        <div className={cn("flex items-center gap-1.5 text-xs", overdue ? "text-red-500 font-medium" : dueSoon ? "text-orange-600 font-medium" : "text-slate-500")}>
           <Clock size={12} className="shrink-0" />
           <span>กำหนด {formatDate(wo.dueDate)}</span>
-          {overdue && <span className="text-[10px] bg-red-50 text-red-500 px-1 rounded">เกินกำหนด</span>}
+          {(overdue || dueSoon) && (
+            <span className={cn("inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-semibold", overdue ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600")}>
+              <AlertTriangle size={10} /> {dueLabel(days)}
+            </span>
+          )}
           {attachCount > 0 && (
             <span className="ml-auto flex items-center gap-0.5 text-slate-400" title={`${attachCount} ไฟล์แนบ`}>
               <Paperclip size={11} /> {attachCount}
@@ -132,25 +151,8 @@ export function WorkOrderCard({ wo, onView, onEdit, onDelete, onApprove, onRejec
           )}
         </div>
 
-        {/* Approval actions */}
-        {wo.status === "pending_approval" && (
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => onApprove?.(wo)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
-            >
-              <CheckCircle2 size={12} /> Approve
-            </button>
-            <button
-              onClick={() => onReject?.(wo)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 rounded-md bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors"
-            >
-              <XCircle size={12} /> Reject
-            </button>
-          </div>
-        )}
-
-        {wo.status === "approved" && (
+        {/* Status actions */}
+        {wo.status === "backlog" && (
           <button
             onClick={() => onStatusChange?.(wo, "in_progress")}
             className="flex items-center justify-center gap-1 h-7 rounded-md bg-gold-50 text-gold-700 text-xs font-medium hover:bg-gold-100 transition-colors"

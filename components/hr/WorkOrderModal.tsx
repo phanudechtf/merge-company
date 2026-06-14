@@ -43,6 +43,7 @@ export function WorkOrderModal({ open, onOpenChange, workOrder, defaultDeptId, o
   });
 
   const requesterId = watch("requesterId");
+  const requesterDeptId = watch("requesterDeptId");
   const assigneeDeptId = watch("assigneeDeptId");
   const attachments = watch("attachments") ?? [];
 
@@ -74,11 +75,13 @@ export function WorkOrderModal({ open, onOpenChange, workOrder, defaultDeptId, o
     setValue("attachments", attachments.filter((_, i) => i !== idx));
   };
 
-  // Auto-fill requesterDeptId when requester changes
+  // requesterDeptId is always derived from the requester — never picked independently
   useEffect(() => {
     if (requesterId) {
       const emp = mockEmployees.find((e) => e.id === requesterId);
-      if (emp) setValue("requesterDeptId", emp.departmentId);
+      setValue("requesterDeptId", emp?.departmentId ?? "", { shouldValidate: true });
+    } else {
+      setValue("requesterDeptId", "", { shouldValidate: true });
     }
   }, [requesterId, setValue]);
 
@@ -173,12 +176,12 @@ export function WorkOrderModal({ open, onOpenChange, workOrder, defaultDeptId, o
                 </div>
                 <div className="space-y-1.5">
                   <Label>แผนกผู้สร้าง *</Label>
-                  <select className={selectClass} {...register("requesterDeptId")}>
-                    <option value="">เลือกแผนก</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  <input type="hidden" {...register("requesterDeptId")} />
+                  <div className="flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700">
+                    {requesterDeptId
+                      ? departments.find((d) => d.id === requesterDeptId)?.name ?? requesterDeptId
+                      : <span className="font-normal text-slate-400">เลือกผู้สร้างก่อน</span>}
+                  </div>
                   {errors.requesterDeptId && <p className="text-xs text-red-500">{errors.requesterDeptId.message}</p>}
                 </div>
               </div>
@@ -316,7 +319,7 @@ export function WorkOrderModal({ open, onOpenChange, workOrder, defaultDeptId, o
               ยกเลิก
             </Button>
             <Button type="submit" className="flex-1" disabled={isSubmitting}>
-              {isSubmitting ? "กำลังบันทึก..." : isEdit ? "บันทึกการแก้ไข" : "ส่งคำขออนุมัติ"}
+              {isSubmitting ? "กำลังบันทึก..." : isEdit ? "บันทึกการแก้ไข" : "สร้างงาน"}
             </Button>
           </div>
         </form>

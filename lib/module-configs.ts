@@ -433,6 +433,38 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     ],
   },
 
+  "purchase-requests": {
+    title: "ขอซื้อของ", breadcrumbs: ["จัดซื้อ", "ขอซื้อของ"], addLabel: "เปิดคำขอซื้อ",
+    searchKeys: ["code", "item", "requester", "department"],
+    columns: [
+      { key: "code", label: "เลขที่" },
+      { key: "item", label: "รายการที่ขอซื้อ" },
+      { key: "qty", label: "จำนวน", type: "number" },
+      { key: "estPrice", label: "งบประมาณ", type: "currency" },
+      { key: "requester", label: "ผู้ขอ" },
+      { key: "department", label: "แผนก" },
+      { key: "date", label: "วันที่ขอ", type: "date" },
+      { key: "status", label: "สถานะ", type: "badge" },
+    ],
+    filters: [{ key: "status", label: "สถานะ" }, { key: "department", label: "แผนก" }],
+    badgeMap: { "อนุมัติ": "success", "รออนุมัติ": "warning", "ปฏิเสธ": "destructive" },
+    workflow: { statusKey: "status", pending: "รออนุมัติ", approve: "อนุมัติ", reject: "ปฏิเสธ" },
+    rows: [
+      { code: "PR-2026-001", item: "MacBook Pro 14\" M4 (ทีม Design)", qty: 2, estPrice: 150000, requester: "รัตนา จันทร์ฉาย", department: "Design", date: "2026-06-08", status: "รออนุมัติ" },
+      { code: "PR-2026-002", item: "กล้อง CCTV IP 4K + NVR สาขา Mega Bangna", qty: 8, estPrice: 85000, requester: "ธีรภัทร วงศ์ทอง", department: "ขาย", date: "2026-06-06", status: "อนุมัติ" },
+      { code: "PR-2026-003", item: "Uniform + ป้ายชื่อ พนักงานใหม่ Central Westgate", qty: 12, estPrice: 36000, requester: "ธีรภัทร วงศ์ทอง", department: "ขาย", date: "2026-06-09", status: "รออนุมัติ" },
+      { code: "PR-2026-004", item: "POS System + อุปกรณ์ สาขา The Mall Bangkapi", qty: 1, estPrice: 120000, requester: "อรทัย พิมพ์ใจ", department: "IT", date: "2026-06-05", status: "อนุมัติ" },
+      { code: "PR-2026-005", item: "ตัวอย่างผ้า collection Summer 2026", qty: 30, estPrice: 8900, requester: "วิชัย จัดหา", department: "จัดซื้อ", date: "2026-06-07", status: "รออนุมัติ" },
+      { code: "PR-2026-006", item: "วัสดุสำนักงาน + หมึกพิมพ์ ไตรมาส 2", qty: 1, estPrice: 5500, requester: "พัชรี สุขใจ", department: "HR", date: "2026-06-02", status: "อนุมัติ" },
+      { code: "PR-2026-007", item: "เครื่องปรับอากาศ 18,000 BTU สาขา Fashion Island", qty: 2, estPrice: 44000, requester: "ปรีชา มั่นคง", department: "สต๊อก", date: "2026-06-10", status: "ปฏิเสธ" },
+    ],
+    kpis: (r) => [
+      { label: "คำขอทั้งหมด", value: r.length, tone: "violet" },
+      { label: "รออนุมัติ", value: count(r, "status", "รออนุมัติ"), tone: "amber" },
+      { label: "งบรออนุมัติ", value: sum(r.filter((x) => x.status === "รออนุมัติ"), "estPrice").toLocaleString(), tone: "blue" },
+    ],
+  },
+
   // ===== สรรหา =====
   recruitment: {
     title: "สรรหา", breadcrumbs: ["สรรหา", "สรรหา"], addLabel: "เปิดรับสมัคร",

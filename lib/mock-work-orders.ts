@@ -3,7 +3,7 @@ import { mockEmployees } from "./mock-employees";
 import { departments } from "./mock-db";
 import type { Department } from "@/types";
 
-export type WorkOrderStatus = "backlog" | "pending_approval" | "approved" | "in_progress" | "done" | "rejected" | "cancelled";
+export type WorkOrderStatus = "backlog" | "in_progress" | "done" | "cancelled";
 export type WorkOrderPriority = "low" | "medium" | "high" | "urgent";
 
 export interface WorkOrderAttachment {
@@ -34,10 +34,6 @@ export interface WorkOrder {
   completedAt?: string;
 
   status: WorkOrderStatus;
-  approverId?: string;
-  approver?: MockEmployee;
-  approvedAt?: string;
-  rejectionReason?: string;
   notes?: string;
   attachments?: WorkOrderAttachment[];
 
@@ -78,8 +74,8 @@ const seed: WorkOrder[] = [
     requesterId: "emp-12", requester: emp("emp-12"), requesterDeptId: "dept-9", requesterDept: dept("dept-9"),
     assigneeIds: ["emp-7", "emp-8"], assignees: emps(["emp-7", "emp-8"]),
     assigneeDeptId: "dept-2", assigneeDept: dept("dept-2"),
-    dueDate: "2026-06-20T00:00:00.000Z",
-    status: "pending_approval",
+    dueDate: "2026-06-11T00:00:00.000Z",
+    status: "backlog",
     createdAt: "2026-06-08T09:00:00.000Z", updatedAt: "2026-06-08T09:00:00.000Z",
   },
   {
@@ -90,8 +86,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-11"], assignees: emps(["emp-11"]),
     assigneeDeptId: "dept-3", assigneeDept: dept("dept-3"),
     dueDate: "2026-06-30T00:00:00.000Z", startDate: "2026-06-15T00:00:00.000Z",
-    status: "approved",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-09T10:00:00.000Z",
+    status: "in_progress",
     createdAt: "2026-06-07T14:00:00.000Z", updatedAt: "2026-06-09T10:00:00.000Z",
   },
   {
@@ -103,7 +98,6 @@ const seed: WorkOrder[] = [
     assigneeDeptId: "dept-4", assigneeDept: dept("dept-4"),
     dueDate: "2026-07-15T00:00:00.000Z",
     status: "in_progress",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-05T11:00:00.000Z",
     createdAt: "2026-06-01T09:00:00.000Z", updatedAt: "2026-06-05T11:00:00.000Z",
   },
   {
@@ -115,7 +109,6 @@ const seed: WorkOrder[] = [
     assigneeDeptId: "dept-6", assigneeDept: dept("dept-6"),
     dueDate: "2026-07-01T00:00:00.000Z",
     status: "done",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-05-20T09:00:00.000Z",
     completedAt: "2026-06-01T17:00:00.000Z",
     createdAt: "2026-05-15T10:00:00.000Z", updatedAt: "2026-06-01T17:00:00.000Z",
   },
@@ -128,7 +121,6 @@ const seed: WorkOrder[] = [
     assigneeDeptId: "dept-9", assigneeDept: dept("dept-9"),
     dueDate: "2026-06-25T00:00:00.000Z", startDate: "2026-06-10T00:00:00.000Z",
     status: "in_progress",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-05T09:00:00.000Z",
     createdAt: "2026-06-03T11:00:00.000Z", updatedAt: "2026-06-05T09:00:00.000Z",
   },
   {
@@ -139,7 +131,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-14"], assignees: emps(["emp-14"]),
     assigneeDeptId: "dept-4", assigneeDept: dept("dept-4"),
     dueDate: "2026-06-12T00:00:00.000Z",
-    status: "pending_approval",
+    status: "backlog",
     createdAt: "2026-06-10T07:00:00.000Z", updatedAt: "2026-06-10T07:00:00.000Z",
   },
   {
@@ -150,8 +142,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-7", "emp-8"], assignees: emps(["emp-7", "emp-8"]),
     assigneeDeptId: "dept-2", assigneeDept: dept("dept-2"),
     dueDate: "2026-07-01T00:00:00.000Z",
-    status: "approved",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-09T14:00:00.000Z",
+    status: "in_progress",
     createdAt: "2026-06-08T10:00:00.000Z", updatedAt: "2026-06-09T14:00:00.000Z",
   },
   {
@@ -162,8 +153,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-6"], assignees: emps(["emp-6"]),
     assigneeDeptId: "dept-5", assigneeDept: dept("dept-5"),
     dueDate: "2026-06-30T00:00:00.000Z",
-    status: "rejected",
-    rejectionReason: "ข้อมูลยังไม่ครบ รอสรุปยอดสาขาปลายเดือน",
+    status: "backlog",
     createdAt: "2026-06-06T09:00:00.000Z", updatedAt: "2026-06-07T11:00:00.000Z",
   },
   {
@@ -196,7 +186,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-9"], assignees: emps(["emp-9"]),
     assigneeDeptId: "dept-8", assigneeDept: dept("dept-8"),
     dueDate: "2026-06-15T00:00:00.000Z", startDate: "2026-06-11T00:00:00.000Z",
-    status: "pending_approval",
+    status: "in_progress",
     attachments: [{ name: "Brief — Merge Zaap on Sale 2026", url: "https://docs.google.com/presentation", kind: "link" }],
     createdAt: "2026-06-11T08:30:00.000Z", updatedAt: "2026-06-11T08:30:00.000Z",
   },
@@ -207,9 +197,8 @@ const seed: WorkOrder[] = [
     requesterId: "emp-1", requester: emp("emp-1"), requesterDeptId: "dept-1", requesterDept: dept("dept-1"),
     assigneeIds: ["emp-9", "emp-12"], assignees: emps(["emp-9", "emp-12"]),
     assigneeDeptId: "dept-8", assigneeDept: dept("dept-8"),
-    dueDate: "2026-06-18T00:00:00.000Z", startDate: "2026-06-11T00:00:00.000Z",
+    dueDate: "2026-06-14T00:00:00.000Z", startDate: "2026-06-11T00:00:00.000Z",
     status: "in_progress",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-11T09:30:00.000Z",
     createdAt: "2026-06-10T16:00:00.000Z", updatedAt: "2026-06-11T09:30:00.000Z",
   },
   {
@@ -220,8 +209,7 @@ const seed: WorkOrder[] = [
     assigneeIds: ["emp-9"], assignees: emps(["emp-9"]),
     assigneeDeptId: "dept-8", assigneeDept: dept("dept-8"),
     dueDate: "2026-06-21T00:00:00.000Z",
-    status: "approved",
-    approverId: "emp-2", approver: emp("emp-2"), approvedAt: "2026-06-10T13:00:00.000Z",
+    status: "in_progress",
     createdAt: "2026-06-09T14:00:00.000Z", updatedAt: "2026-06-10T13:00:00.000Z",
   },
 ];
@@ -275,29 +263,6 @@ export function updateWorkOrder(id: string, input: Partial<WorkOrderCreateInput>
   return updated;
 }
 
-export function approveWorkOrder(id: string, approverId: string): WorkOrder | null {
-  const idx = workOrders.findIndex((w) => w.id === id);
-  if (idx === -1) return null;
-  const approver = mockEmployees.find((e) => e.id === approverId);
-  const updated: WorkOrder = {
-    ...workOrders[idx], status: "approved",
-    approverId, approver, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  };
-  workOrders = workOrders.map((w) => (w.id === id ? updated : w));
-  return updated;
-}
-
-export function rejectWorkOrder(id: string, approverId: string, reason: string): WorkOrder | null {
-  const idx = workOrders.findIndex((w) => w.id === id);
-  if (idx === -1) return null;
-  const updated: WorkOrder = {
-    ...workOrders[idx], status: "rejected",
-    approverId, rejectionReason: reason, updatedAt: new Date().toISOString(),
-  };
-  workOrders = workOrders.map((w) => (w.id === id ? updated : w));
-  return updated;
-}
-
 export function updateWorkOrderStatus(id: string, status: WorkOrderStatus): WorkOrder | null {
   const idx = workOrders.findIndex((w) => w.id === id);
   if (idx === -1) return null;
@@ -319,9 +284,8 @@ export function deleteWorkOrder(id: string): boolean {
 export function getWorkOrderStats() {
   return {
     total: workOrders.length,
-    pendingApproval: workOrders.filter((w) => w.status === "pending_approval").length,
+    backlog: workOrders.filter((w) => w.status === "backlog").length,
     inProgress: workOrders.filter((w) => w.status === "in_progress").length,
     done: workOrders.filter((w) => w.status === "done").length,
-    approved: workOrders.filter((w) => w.status === "approved").length,
   };
 }

@@ -45,6 +45,9 @@ import {
   Store,
   Warehouse,
   Map,
+  Mic,
+  Workflow,
+  PackagePlus,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSidebar } from "@/components/layout/SidebarContext";
@@ -74,6 +77,7 @@ const menuGroups = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={16} /> },
       { label: "การ์ดงาน", href: "/work-orders", icon: <ClipboardList size={16} /> },
+      { label: "ภาพรวมระบบ", href: "/overview", icon: <Workflow size={16} /> },
     ],
   },
   {
@@ -112,11 +116,13 @@ const menuGroups = [
     label: "สถานที่",
     items: [
       { label: "ห้องประชุม", href: "/meeting-rooms", icon: <DoorOpen size={16} /> },
+      { label: "บันทึกการประชุม", href: "/meetings", icon: <Mic size={16} /> },
     ],
   },
   {
     label: "การเงิน",
     items: [
+      { label: "ขอซื้อของ", href: "/purchase-requests", icon: <PackagePlus size={16} /> },
       { label: "เงินเดือน", href: "/payroll", icon: <Banknote size={16} /> },
       { label: "OT", href: "/overtime", icon: <Timer size={16} /> },
       { label: "ค่าคอมมิชชั่น", href: "/commission", icon: <TrendingUp size={16} /> },
@@ -211,7 +217,7 @@ export function Sidebar() {
               <img src="/merge-logo.png" alt="MERGE" className="w-full h-full object-contain p-0.5" />
             </div>
             <div>
-              <p className="text-white text-sm font-bold leading-tight tracking-wide">MERGE HR Suite</p>
+              <p className="text-white text-sm font-bold leading-tight tracking-wide">MERGE Workspace</p>
               <p className="text-slate-500 text-[10px] leading-tight mt-0.5">SENSE ASIA CORPORATION</p>
             </div>
           </div>

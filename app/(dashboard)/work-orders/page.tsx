@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ClipboardList, Clock, PlayCircle, CheckCircle2, Plus, Archive, UserCircle2, ArrowRight } from "lucide-react";
+import { ChevronRight, ClipboardList, PlayCircle, CheckCircle2, Plus, Archive, UserCircle2, ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { WorkOrderModal } from "@/components/hr/WorkOrderModal";
 import { useToast } from "@/components/ui/toast";
@@ -22,7 +22,7 @@ const deptAccent: Record<string, string> = {
 
 interface DeptStats {
   total: number;
-  pending: number;
+  backlog: number;
   inProgress: number;
   done: number;
 }
@@ -49,24 +49,20 @@ export default function WorkOrdersLandingPage() {
     const deptOrders = allWorkOrders.filter((w) => w.assigneeDeptId === deptId);
     return {
       total: deptOrders.length,
-      pending: deptOrders.filter((w) => w.status === "pending_approval").length,
-      inProgress: deptOrders.filter((w) => w.status === "in_progress" || w.status === "approved").length,
+      backlog: deptOrders.filter((w) => w.status === "backlog").length,
+      inProgress: deptOrders.filter((w) => w.status === "in_progress").length,
       done: deptOrders.filter((w) => w.status === "done").length,
     };
   }
 
   const totalAll = allWorkOrders.length;
   const totalBacklog = allWorkOrders.filter((w) => w.status === "backlog").length;
-  const totalPending = allWorkOrders.filter((w) => w.status === "pending_approval").length;
-  const totalInProgress = allWorkOrders.filter((w) => w.status === "approved" || w.status === "in_progress").length;
+  const totalInProgress = allWorkOrders.filter((w) => w.status === "in_progress").length;
   const totalDone = allWorkOrders.filter((w) => w.status === "done").length;
 
   // งานที่เกี่ยวกับฉัน (รับผิดชอบ หรือ เป็นคนสั่ง) ข้ามทุกแผนก
   const myCount = allWorkOrders.filter(
     (w) => (w.assigneeIds ?? []).includes(currentUserId) || w.requesterId === currentUserId
-  ).length;
-  const myPending = allWorkOrders.filter(
-    (w) => (w.assigneeIds ?? []).includes(currentUserId) && w.status === "pending_approval"
   ).length;
 
   return (
@@ -75,11 +71,10 @@ export default function WorkOrdersLandingPage() {
 
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         {/* Top stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "งานทั้งหมด",     value: totalAll,        icon: <ClipboardList size={18} />, color: "text-slate-600", bg: "bg-slate-100" },
             { label: "Backlog",        value: totalBacklog,    icon: <Archive size={18} />,       color: "text-slate-500", bg: "bg-slate-100" },
-            { label: "รอ Approve",     value: totalPending,    icon: <Clock size={18} />,         color: "text-amber-600", bg: "bg-amber-50" },
             { label: "กำลังดำเนินการ", value: totalInProgress, icon: <PlayCircle size={18} />,   color: "text-gold-600", bg: "bg-gold-50" },
             { label: "เสร็จสิ้น",      value: totalDone,       icon: <CheckCircle2 size={18} />, color: "text-emerald-600", bg: "bg-emerald-50" },
           ].map((c) => (
@@ -109,9 +104,6 @@ export default function WorkOrdersLandingPage() {
                 <p className="text-slate-400 text-xs mt-0.5">งานที่ฉันรับผิดชอบหรือเป็นคนสั่ง — รวมทุกแผนก</p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                {myPending > 0 && (
-                  <span className="text-[10px] font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">{myPending} รออนุมัติ</span>
-                )}
                 <span className="text-2xl font-bold text-gold-400">{myCount}</span>
                 <ArrowRight size={18} className="text-slate-500 group-hover:text-gold-400 group-hover:translate-x-0.5 transition-all" />
               </div>
@@ -173,9 +165,9 @@ export default function WorkOrdersLandingPage() {
                         <p className="text-slate-900 font-bold text-sm leading-tight truncate">{dept.name}</p>
                         <p className="text-slate-400 text-[10px] font-mono">{dept.code}</p>
                       </div>
-                      {stats.pending > 0 && (
-                        <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                          {stats.pending} รอ
+                      {stats.backlog > 0 && (
+                        <span className="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                          {stats.backlog} ค้าง
                         </span>
                       )}
                     </div>

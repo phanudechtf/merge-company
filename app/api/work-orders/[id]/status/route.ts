@@ -4,11 +4,8 @@ import { updateWorkOrderStatus, type WorkOrderStatus } from "@/lib/mock-work-ord
 type Ctx = { params: Promise<{ id: string }> };
 const validStatuses = new Set<WorkOrderStatus>([
   "backlog",
-  "pending_approval",
-  "approved",
   "in_progress",
   "done",
-  "rejected",
   "cancelled",
 ]);
 

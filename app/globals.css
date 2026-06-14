@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Champagne Gold accent scale */
-  --color-gold-50: #faf7f0;
-  --color-gold-100: #f3ecdd;
-  --color-gold-200: #e8d9bb;
-  --color-gold-300: #d9c195;
-  --color-gold-400: #c9aa78;
-  --color-gold-500: #b89b68;
-  --color-gold-600: #a08453;
-  --color-gold-700: #836a43;
-  --color-gold-800: #6b563a;
-  --color-gold-900: #594832;
+  /* Chrome / Gunmetal Silver accent scale (cool neutral, McQueen/Chrome Hearts feel).
+     Keeps the same name `gold-*` so every existing class flips to silver at once;
+     lightness mirrors the old champagne scale so contrast relationships hold. */
+  --color-gold-50: #f6f7f9;
+  --color-gold-100: #eceef1;
+  --color-gold-200: #dde0e4;
+  --color-gold-300: #c5c9cf;
+  --color-gold-400: #a9aeb5;
+  --color-gold-500: #8b9097;
+  --color-gold-600: #6f747b;
+  --color-gold-700: #565b61;
+  --color-gold-800: #41454a;
+  --color-gold-900: #2e3135;
 
   /* Brand neutrals */
   --color-ivory: #faf8f5;
@@ -19,6 +21,84 @@
   --color-line: #e9e5df;
 
   --font-sans: var(--font-inter), var(--font-prompt), -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+:root {
+  /* Chrome gradients for premium brand surfaces (logo, hero text, plates).
+     Vertical 5-stop = polished metal reflection; dark variant = gunmetal X. */
+  --merge-chrome: linear-gradient(
+    180deg,
+    #ffffff 0%, #d7d7d7 20%, #8a8a8a 50%, #d7d7d7 75%, #ffffff 100%
+  );
+  --merge-gunmetal: linear-gradient(
+    180deg,
+    #c8c8c8 0%, #8d8d8d 40%, #4f4f4f 75%, #222222 100%
+  );
+}
+
+/* Flame flicker for urgent work-order cards */
+@keyframes flame-flicker {
+  0%, 100% { transform: translateY(0) scale(1) rotate(-2deg); opacity: 1; }
+  25%      { transform: translateY(-1px) scale(1.12) rotate(2deg); opacity: 0.9; }
+  50%      { transform: translateY(0) scale(0.95) rotate(-1deg); opacity: 1; }
+  75%      { transform: translateY(-1px) scale(1.08) rotate(1deg); opacity: 0.92; }
+}
+.animate-flame {
+  animation: flame-flicker 0.7s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* Glowing flame ring around urgent cards.
+   Includes an inset glow so the effect is visible even when neighbouring
+   cards / the scroll container clip the outer shadow. */
+@keyframes flame-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.8),
+                0 0 12px 2px rgba(239, 68, 68, 0.55),
+                0 0 24px 5px rgba(251, 146, 60, 0.35),
+                inset 0 0 10px 0 rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.9),
+                0 0 20px 4px rgba(239, 68, 68, 0.75),
+                0 0 38px 10px rgba(251, 146, 60, 0.5),
+                inset 0 0 16px 2px rgba(251, 146, 60, 0.45);
+  }
+}
+.animate-flame-glow {
+  animation: flame-glow 1.1s ease-in-out infinite;
+}
+
+/* Due-soon (orange) and overdue (red) attention pulses for work-order cards */
+@keyframes due-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0), 0 0 8px 0 rgba(251, 146, 60, 0.18); }
+  50%      { box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.2), 0 0 16px 3px rgba(251, 146, 60, 0.45); }
+}
+.animate-due-pulse {
+  animation: due-pulse 1.6s ease-in-out infinite;
+}
+@keyframes overdue-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 8px 0 rgba(239, 68, 68, 0.22); }
+  50%      { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22), 0 0 18px 4px rgba(239, 68, 68, 0.5); }
+}
+.animate-overdue-pulse {
+  animation: overdue-pulse 1.3s ease-in-out infinite;
+}
+
+/* Apply chrome reflection to text: <span class="chrome-text">MERGE</span> */
+.chrome-text {
+  background: var(--merge-chrome);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.gunmetal-text {
+  background: var(--merge-gunmetal);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 :root {
@@ -43,9 +123,9 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d9d2c7;
+  background: #cdd0d4;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #b89b68;
+  background: #8b9097;
 }

@@ -26,12 +26,20 @@ const avatarColors = [
 const selectClass =
   "flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-500";
 
-interface OrgData {
+interface Holder {
   name: string;
+  initials: string;
+}
+
+interface OrgData {
   title: string;
   dept: string;
-  initials: string;
+  holders: Holder[];
   [key: string]: unknown;
+}
+
+function initialsOf(name: string) {
+  return name.trim().slice(0, 2);
 }
 
 type OrgCardProps = NodeProps & {
@@ -41,18 +49,28 @@ type OrgCardProps = NodeProps & {
 
 function OrgCardNode({ id, data, onEdit, onDelete }: OrgCardProps) {
   const d = data as OrgData;
-  const colorIdx = parseInt(id.replace(/\D/g, ""), 10) % avatarColors.length || 0;
+  const holders = d.holders ?? [];
+  const colorBase = parseInt(id.replace(/\D/g, ""), 10) || 0;
   return (
-    <div className="group relative bg-white rounded-xl border-2 border-slate-200 shadow-sm hover:border-gold-300 hover:shadow-md transition-all w-[200px]">
+    <div className="group relative bg-white rounded-xl border-2 border-slate-200 shadow-sm hover:border-gold-300 hover:shadow-md transition-all w-[210px]">
       <Handle type="target" position={Position.Top} className="!bg-gold-400 !w-2.5 !h-2.5" />
-      <div className="flex items-center gap-2.5 p-3">
-        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold shrink-0", avatarColors[colorIdx])}>
-          {d.initials}
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900 leading-tight">{d.title}</p>
+          {holders.length > 1 && (
+            <span className="shrink-0 text-[10px] font-semibold bg-gold-100 text-gold-700 px-1.5 py-0.5 rounded-full">{holders.length} คน</span>
+          )}
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{d.title}</p>
-          <p className="text-[11px] text-slate-500 truncate">{d.name}</p>
-          <p className="text-[10px] text-slate-400 truncate">{d.dept}</p>
+        <p className="text-[10px] text-slate-400 mt-0.5 mb-2">{d.dept}</p>
+        <div className="space-y-1.5">
+          {holders.map((h, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0", avatarColors[(colorBase + i) % avatarColors.length])}>
+                {h.initials}
+              </div>
+              <p className="text-[11px] text-slate-600 truncate">{h.name}</p>
+            </div>
+          ))}
         </div>
       </div>
       <div className="absolute -top-2.5 -right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -68,41 +86,68 @@ function OrgCardNode({ id, data, onEdit, onDelete }: OrgCardProps) {
   );
 }
 
-// auto layout จาก tree (parentId) → x,y
+interface OrgGroup {
+  gid: string;
+  title: string;
+  dept: string;
+  parentId: string | null; // original emp id of the manager
+  holders: Holder[];
+}
+
+// Group same position (same manager + title + dept) into one card, then auto-layout the tree.
 function buildGraph(): { nodes: Node[]; edges: Edge[] } {
-  const childrenMap = new Map<string | null, typeof orgNodes>();
+  const groups = new Map<string, OrgGroup>();
+  const empToGid = new Map<string, string>();
+  let gi = 0;
   for (const n of orgNodes) {
-    const arr = childrenMap.get(n.parentId) ?? [];
-    arr.push(n);
-    childrenMap.set(n.parentId, arr);
+    const key = `${n.parentId ?? "root"}|${n.title}|${n.departmentName}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { gid: `grp-${gi++}`, title: n.title, dept: n.departmentName, parentId: n.parentId, holders: [] };
+      groups.set(key, g);
+    }
+    g.holders.push({ name: n.name, initials: n.avatarInitials });
+    empToGid.set(n.id, g.gid);
   }
-  const X_GAP = 230, Y_GAP = 150;
+  const groupList = [...groups.values()];
+  const parentGidOf = (g: OrgGroup) => (g.parentId ? empToGid.get(g.parentId) ?? null : null);
+
+  const childrenMap = new Map<string | null, OrgGroup[]>();
+  for (const g of groupList) {
+    const pg = parentGidOf(g);
+    const arr = childrenMap.get(pg) ?? [];
+    arr.push(g);
+    childrenMap.set(pg, arr);
+  }
+
+  const X_GAP = 250, Y_GAP = 170;
   const pos: Record<string, { x: number; y: number }> = {};
   let leafX = 0;
-  const walk = (id: string, depth: number): number => {
-    const kids = childrenMap.get(id) ?? [];
+  const walk = (gid: string, depth: number): number => {
+    const kids = childrenMap.get(gid) ?? [];
     if (kids.length === 0) {
       const x = leafX * X_GAP;
       leafX += 1;
-      pos[id] = { x, y: depth * Y_GAP };
+      pos[gid] = { x, y: depth * Y_GAP };
       return x;
     }
-    const xs = kids.map((k) => walk(k.id, depth + 1));
+    const xs = kids.map((k) => walk(k.gid, depth + 1));
     const x = (xs[0] + xs[xs.length - 1]) / 2;
-    pos[id] = { x, y: depth * Y_GAP };
+    pos[gid] = { x, y: depth * Y_GAP };
     return x;
   };
-  (childrenMap.get(null) ?? []).forEach((r) => walk(r.id, 0));
+  (childrenMap.get(null) ?? []).forEach((r) => walk(r.gid, 0));
 
-  const nodes: Node[] = orgNodes.map((n) => ({
-    id: n.id,
+  const nodes: Node[] = groupList.map((g) => ({
+    id: g.gid,
     type: "orgCard",
-    position: pos[n.id] ?? { x: 0, y: 0 },
-    data: { name: n.name, title: n.title, dept: n.departmentName, initials: n.avatarInitials },
+    position: pos[g.gid] ?? { x: 0, y: 0 },
+    data: { title: g.title, dept: g.dept, holders: g.holders },
   }));
-  const edges: Edge[] = orgNodes
-    .filter((n) => n.parentId)
-    .map((n) => ({ id: `e-${n.parentId}-${n.id}`, source: n.parentId!, target: n.id, type: "smoothstep" }));
+  const edges: Edge[] = groupList
+    .map((g) => ({ g, pg: parentGidOf(g) }))
+    .filter(({ pg }) => pg)
+    .map(({ g, pg }) => ({ id: `e-${pg}-${g.gid}`, source: pg!, target: g.gid, type: "smoothstep" }));
   return { nodes, edges };
 }
 
@@ -117,7 +162,7 @@ export default function OrgChartPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
   const [edit, setEdit] = useState<EditState | null>(null);
-  const [form, setForm] = useState({ name: "", title: "", dept: departments[0].name });
+  const [form, setForm] = useState<{ title: string; dept: string; holders: string[] }>({ title: "", dept: departments[0].name, holders: [""] });
   const [deleteNodeId, setDeleteNodeId] = useState<string | null>(null);
 
   const handleDelete = useCallback((id: string) => setDeleteNodeId(id), []);
@@ -137,7 +182,8 @@ export default function OrgChartPage() {
       const node = prev.find((n) => n.id === id);
       if (node) {
         const d = node.data as OrgData;
-        setForm({ name: d.name, title: d.title, dept: d.dept });
+        const names = (d.holders ?? []).map((h) => h.name);
+        setForm({ title: d.title, dept: d.dept, holders: names.length ? names : [""] });
         setEdit({ id });
       }
       return prev;
@@ -157,16 +203,23 @@ export default function OrgChartPage() {
   );
 
   const openAdd = () => {
-    setForm({ name: "", title: "", dept: departments[0].name });
+    setForm({ title: "", dept: departments[0].name, holders: [""] });
     setEdit({ id: null });
   };
 
+  const setHolder = (i: number, value: string) =>
+    setForm((f) => ({ ...f, holders: f.holders.map((h, idx) => (idx === i ? value : h)) }));
+  const addHolder = () => setForm((f) => ({ ...f, holders: [...f.holders, ""] }));
+  const removeHolder = (i: number) =>
+    setForm((f) => ({ ...f, holders: f.holders.filter((_, idx) => idx !== i) }));
+
   const submitEdit = () => {
-    if (!form.name.trim() || !form.title.trim()) { toast("กรุณาใส่ชื่อและตำแหน่ง", "error"); return; }
-    const initials = form.name.trim().slice(0, 2);
+    const names = form.holders.map((s) => s.trim()).filter(Boolean);
+    if (!form.title.trim() || names.length === 0) { toast("กรุณาใส่ตำแหน่งและผู้ดำรงตำแหน่งอย่างน้อย 1 คน", "error"); return; }
+    const holders: Holder[] = names.map((name) => ({ name, initials: initialsOf(name) }));
     if (edit?.id) {
       setNodes((prev) => prev.map((n) => n.id === edit.id
-        ? { ...n, data: { ...n.data, name: form.name.trim(), title: form.title.trim(), dept: form.dept, initials } }
+        ? { ...n, data: { ...n.data, title: form.title.trim(), dept: form.dept, holders } }
         : n));
       toast("บันทึกแล้ว");
     } else {
@@ -175,7 +228,7 @@ export default function OrgChartPage() {
       setNodes((prev) => [...prev, {
         id, type: "orgCard",
         position: { x: 80 + offset, y: 60 + offset },
-        data: { name: form.name.trim(), title: form.title.trim(), dept: form.dept, initials },
+        data: { title: form.title.trim(), dept: form.dept, holders },
       }]);
       toast("เพิ่มตำแหน่งแล้ว — ลากเส้นเชื่อมสายบังคับบัญชาได้");
     }
@@ -233,10 +286,6 @@ export default function OrgChartPage() {
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
-                <Label>ชื่อ-นามสกุล *</Label>
-                <Input placeholder="เช่น สมหญิง รักดี" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
                 <Label>ตำแหน่ง *</Label>
                 <Input placeholder="เช่น Marketing Officer" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
               </div>
@@ -245,6 +294,24 @@ export default function OrgChartPage() {
                 <select className={selectClass} value={form.dept} onChange={(e) => setForm((f) => ({ ...f, dept: e.target.value }))}>
                   {departments.map((dep) => <option key={dep.id} value={dep.name}>{dep.name}</option>)}
                 </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>ผู้ดำรงตำแหน่ง * <span className="font-normal text-slate-400">(เพิ่มได้หลายคน)</span></Label>
+                <div className="space-y-2">
+                  {form.holders.map((name, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input placeholder={`ชื่อ-นามสกุล คนที่ ${i + 1}`} value={name} onChange={(e) => setHolder(i, e.target.value)} />
+                      {form.holders.length > 1 && (
+                        <button onClick={() => removeHolder(i)} className="shrink-0 text-slate-400 hover:text-red-500" title="ลบคนนี้">
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={addHolder} className="inline-flex items-center gap-1 text-sm font-medium text-gold-700 hover:text-gold-800">
+                    <Plus size={14} /> เพิ่มคนในตำแหน่งนี้
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex gap-2 px-6 py-4 border-t border-slate-200 bg-slate-50/50 rounded-b-xl">

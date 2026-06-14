@@ -25,16 +25,15 @@ const deptColors: Record<string, string> = {
 };
 
 function isOverdue(dueDate: string, status: string) {
-  if (["done","cancelled","rejected"].includes(status)) return false;
+  if (["done","cancelled"].includes(status)) return false;
   return new Date(dueDate) < new Date();
 }
 
 const statusLabel: Record<string, { label: string; variant: "default" | "success" | "warning" | "destructive" | "outline" }> = {
-  backlog:          { label: "Backlog",         variant: "outline" },
-  pending_approval: { label: "รอ Approve",      variant: "warning" },
-  in_progress:      { label: "กำลังทำ",         variant: "default" },
-  done:             { label: "เสร็จ",           variant: "success" },
-  rejected:         { label: "ถูกปฏิเสธ",       variant: "destructive" },
+  backlog:     { label: "Backlog",   variant: "outline" },
+  in_progress: { label: "กำลังทำ",   variant: "default" },
+  done:        { label: "เสร็จ",     variant: "success" },
+  cancelled:   { label: "ยกเลิก",    variant: "outline" },
 };
 
 export default function DashboardPage() {
@@ -54,9 +53,9 @@ export default function DashboardPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const activeWO = workOrders.filter((w) => !["done","rejected","cancelled"].includes(w.status));
+  const activeWO = workOrders.filter((w) => !["done","cancelled"].includes(w.status));
   const overdueWO = workOrders.filter((w) => isOverdue(w.dueDate, w.status));
-  const pendingWO = workOrders.filter((w) => w.status === "pending_approval");
+  const backlogWO = workOrders.filter((w) => w.status === "backlog");
   const recentWO = [...workOrders].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
 
   const deptStats = departments.map((d) => {
@@ -75,7 +74,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-900">ยินดีต้อนรับ, {name}</h1>
-            <p className="text-sm text-slate-400 mt-0.5">SENSE ASIA CORPORATION · MERGE HR Suite</p>
+            <p className="text-sm text-slate-400 mt-0.5">SENSE ASIA CORPORATION · MERGE Workspace</p>
           </div>
           <Button onClick={() => router.push("/work-orders")} size="sm">
             <Plus size={14} /> สร้างงานใหม่
@@ -98,7 +97,7 @@ export default function DashboardPage() {
             {
               label: "งาน Active", value: activeWO.length,
               icon: <ClipboardList size={18} />, color: "text-teal-600", bg: "bg-teal-50",
-              sub: `${pendingWO.length} รอ Approve`, onClick: () => router.push("/work-orders"),
+              sub: `${backlogWO.length} ใน Backlog`, onClick: () => router.push("/work-orders"),
             },
             {
               label: "เกินกำหนด", value: overdueWO.length,
@@ -223,14 +222,12 @@ export default function DashboardPage() {
         {/* Work order status summary */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
           <h2 className="text-sm font-bold text-slate-900 mb-4">ภาพรวมสถานะงาน</h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { key: "backlog",          label: "Backlog",         color: "bg-slate-400", textColor: "text-slate-700" },
-              { key: "pending_approval", label: "รอ Approve",      color: "bg-amber-400", textColor: "text-amber-700" },
-              { key: "approved",         label: "รอเริ่ม",         color: "bg-blue-400",  textColor: "text-blue-700" },
-              { key: "in_progress",      label: "กำลังทำ",         color: "bg-gold-500",textColor: "text-gold-700" },
-              { key: "done",             label: "เสร็จสิ้น",       color: "bg-emerald-500",textColor: "text-emerald-700" },
-              { key: "rejected",         label: "ถูกปฏิเสธ",      color: "bg-red-400",   textColor: "text-red-700" },
+              { key: "backlog",     label: "Backlog",   color: "bg-slate-400", textColor: "text-slate-700" },
+              { key: "in_progress", label: "กำลังทำ",   color: "bg-gold-500",textColor: "text-gold-700" },
+              { key: "done",        label: "เสร็จสิ้น", color: "bg-emerald-500",textColor: "text-emerald-700" },
+              { key: "cancelled",   label: "ยกเลิก",    color: "bg-red-400",   textColor: "text-red-700" },
             ].map((s) => {
               const count = workOrders.filter((w) => w.status === s.key).length;
               const pct = workOrders.length > 0 ? Math.round((count / workOrders.length) * 100) : 0;
@@ -256,7 +253,7 @@ export default function DashboardPage() {
           {[
             { label: "การ์ดงาน", sub: "สร้างและติดตามงาน", icon: <ClipboardList size={20} />, href: "/work-orders", color: "text-gold-600", bg: "bg-gold-50" },
             { label: "ตำแหน่งงาน", sub: "จัดการตำแหน่ง", icon: <Briefcase size={20} />, href: "/positions", color: "text-blue-600", bg: "bg-blue-50" },
-            { label: "รออนุมัติ", sub: `${pendingWO.length} งานรอ`, icon: <Timer size={20} />, href: "/work-orders/all", color: "text-amber-600", bg: "bg-amber-50" },
+            { label: "งาน Backlog", sub: `${backlogWO.length} งานค้าง`, icon: <Timer size={20} />, href: "/work-orders/all", color: "text-amber-600", bg: "bg-amber-50" },
             { label: "งานเสร็จแล้ว", sub: `${workOrders.filter((w) => w.status === "done").length} งาน`, icon: <CheckCircle2 size={20} />, href: "/work-orders/all", color: "text-emerald-600", bg: "bg-emerald-50" },
           ].map((q) => (
             <button

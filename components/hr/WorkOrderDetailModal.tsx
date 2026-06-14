@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Clock, CheckCircle2, XCircle, User, Users, Building2, Calendar, MessageSquare, FileText, Link2 } from "lucide-react";
+import { X, CheckCircle2, User, Users, Building2, Calendar, MessageSquare, FileText, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
@@ -13,23 +13,17 @@ interface WorkOrderDetailModalProps {
 }
 
 const statusLabel: Record<WorkOrderStatus, string> = {
-  backlog:          "Backlog",
-  pending_approval: "รอ Approve",
-  approved:         "Approved",
-  in_progress:      "กำลังดำเนินการ",
-  done:             "เสร็จสิ้น",
-  rejected:         "ถูกปฏิเสธ",
-  cancelled:        "ยกเลิก",
+  backlog:     "Backlog",
+  in_progress: "กำลังดำเนินการ",
+  done:        "เสร็จสิ้น",
+  cancelled:   "ยกเลิก",
 };
 
 const statusVariant: Record<WorkOrderStatus, "default" | "success" | "warning" | "destructive" | "recruiting" | "outline"> = {
-  backlog:          "outline",
-  pending_approval: "warning",
-  approved:         "recruiting",
-  in_progress:      "default",
-  done:             "success",
-  rejected:         "destructive",
-  cancelled:        "outline",
+  backlog:     "outline",
+  in_progress: "default",
+  done:        "success",
+  cancelled:   "outline",
 };
 
 const priorityLabel: Record<string, { label: string; color: string; bar: string }> = {
@@ -40,12 +34,12 @@ const priorityLabel: Record<string, { label: string; color: string; bar: string 
 };
 
 function isOverdue(dueDate: string, status: WorkOrderStatus) {
-  if (status === "done" || status === "cancelled" || status === "rejected") return false;
+  if (status === "done" || status === "cancelled") return false;
   return new Date(dueDate) < new Date();
 }
 
 function dueDateBadge(dueDate: string, status: WorkOrderStatus) {
-  if (status === "done" || status === "cancelled" || status === "rejected") return null;
+  if (status === "done" || status === "cancelled") return null;
   const due = new Date(dueDate);
   const now = new Date();
   const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -66,24 +60,6 @@ function buildTimeline(wo: WorkOrder) {
     time: wo.createdAt,
   });
 
-  if (wo.status === "pending_approval" || wo.approverId) {
-    events.push({
-      icon: Clock, iconColor: "text-amber-500",
-      label: "ส่งขออนุมัติ",
-      detail: `ส่งให้แผนก ${wo.assigneeDept.name} ตรวจสอบ`,
-      time: wo.createdAt,
-    });
-  }
-
-  if (wo.approvedAt && wo.approver) {
-    events.push({
-      icon: CheckCircle2, iconColor: "text-emerald-500",
-      label: wo.status === "rejected" ? "ถูกปฏิเสธ" : "อนุมัติแล้ว",
-      detail: `โดย ${wo.approver.fullName}`,
-      time: wo.approvedAt,
-    });
-  }
-
   if (wo.status === "in_progress" || wo.status === "done") {
     events.push({
       icon: CheckCircle2, iconColor: "text-gold-500",
@@ -98,15 +74,6 @@ function buildTimeline(wo: WorkOrder) {
       icon: CheckCircle2, iconColor: "text-emerald-600",
       label: "เสร็จสิ้น",
       time: wo.completedAt,
-    });
-  }
-
-  if (wo.status === "rejected") {
-    events.push({
-      icon: XCircle, iconColor: "text-red-500",
-      label: "ถูกปฏิเสธ",
-      detail: wo.rejectionReason ?? "ไม่ระบุเหตุผล",
-      time: wo.updatedAt,
     });
   }
 
@@ -161,8 +128,7 @@ export function WorkOrderDetailModal({ workOrder: wo, onClose, onEdit }: WorkOrd
                   { icon: Building2, label: "แผนกรับงาน", value: wo.assigneeDept.name },
                   { icon: Calendar, label: "กำหนดเสร็จ", value: formatDate(wo.dueDate), extra: overdue ? "text-red-600 font-semibold" : "" },
                   ...(wo.startDate ? [{ icon: Calendar, label: "วันเริ่มต้น", value: formatDate(wo.startDate), extra: "" }] : []),
-                  ...(wo.approver ? [{ icon: CheckCircle2, label: "ผู้อนุมัติ", value: wo.approver.fullName, extra: "" }] : []),
-                  ...(wo.approvedAt ? [{ icon: Calendar, label: "วันอนุมัติ", value: formatDate(wo.approvedAt), extra: "" }] : []),
+                  ...(wo.completedAt ? [{ icon: CheckCircle2, label: "วันเสร็จสิ้น", value: formatDate(wo.completedAt), extra: "" }] : []),
                 ].map(({ icon: Icon, label, value, extra }) => (
                   <div key={label} className="bg-slate-50 rounded-xl p-3">
                     <div className="flex items-center gap-1.5 mb-1">
@@ -179,17 +145,6 @@ export function WorkOrderDetailModal({ workOrder: wo, onClose, onEdit }: WorkOrd
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">รายละเอียด</p>
                   <p className="text-sm text-slate-700 bg-slate-50 rounded-xl p-4 leading-relaxed">{wo.description}</p>
-                </div>
-              )}
-
-              {/* Rejection reason */}
-              {wo.rejectionReason && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <XCircle size={14} className="text-red-500" />
-                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">เหตุผลที่ปฏิเสธ</p>
-                  </div>
-                  <p className="text-sm text-red-700">{wo.rejectionReason}</p>
                 </div>
               )}
 

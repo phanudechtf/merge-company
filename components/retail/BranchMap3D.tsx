@@ -1,26 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   MapPin, Phone, Clock, Compass, X, Users, Ruler, CalendarDays,
-  Hammer, Moon, TrendingUp, UserCircle2, CalendarSearch, CheckCircle2, CircleDashed,
-  ChevronLeft,
+  Hammer, Moon, TrendingUp, TrendingDown, UserCircle2, CalendarSearch, CheckCircle2, CircleDashed,
+  ChevronLeft, Package, ClipboardPlus, Filter, Search, Layers, Wallet,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { stores, storeOps, storeTeam } from "@/lib/mock-retail";
+import { getShipmentsFor, type Shipment } from "@/lib/store-shipments";
+import { useToast } from "@/components/ui/toast";
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const BANGKOK_CENTER: [number, number] = [100.553, 13.78];
 
 const typeColor: Record<string, string> = {
   "STORE": "#111111",
-  "Central Dept": "#b89b68",
+  "Central Dept": "#c5c9cf",
   "Pop-Up": "#64748b",
 };
 
 const types = ["STORE", "Central Dept", "Pop-Up"];
+
+const perfColor: Record<string, string> = { over: "#10b981", under: "#f59e0b" };
 
 // pin images drawn on canvas — symbol layers are NOT depth-occluded by 3D buildings (circles are)
 function makePinImage(color: string, ring: string) {
@@ -48,7 +53,12 @@ const branchGeojson: GeoJSON.FeatureCollection = {
     type: "Feature",
     id: i,
     geometry: { type: "Point", coordinates: [Number(s.lng), Number(s.lat)] },
-    properties: { store: String(s.store), type: String(s.type), color: typeColor[String(s.type)] },
+    properties: {
+      store: String(s.store),
+      type: String(s.type),
+      color: typeColor[String(s.type)],
+      under: Number(s.sales) < Number(s.target),
+    },
   })),
 };
 
@@ -59,12 +69,28 @@ export function BranchMap3D() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [dayViewOpen, setDayViewOpen] = useState(false);
+  const [underTargetOnly, setUnderTargetOnly] = useState(false);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [checkedOverride, setCheckedOverride] = useState<Record<string, boolean>>({});
+  const [query, setQuery] = useState("");
+  const [colorMode, setColorMode] = useState<"type" | "perf">("type");
+
+  const router = useRouter();
+  const toast = useToast();
+
+  const createWorkOrderFor = (title: string) => {
+    toast(`เปิดหน้าการ์ดงาน — สร้างงาน “${title}” ให้ ${selected}`);
+    router.push("/work-orders");
+  };
+  const toggleCheck = (key: string, fallback: boolean) =>
+    setCheckedOverride((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
   const openBranch = (storeName: string, fly: boolean) => {
     const map = mapRef.current;
     const s = stores.find((x) => x.store === storeName);
     if (!map || !s) return;
     setSelected(storeName);
+    setShipments(getShipmentsFor(storeName)); // ลังที่กำลังส่งมาสาขานี้
     setDetailOpen(false); // show only the side tab — details open on demand
     if (fly) {
       map.flyTo({ center: [Number(s.lng), Number(s.lat)], zoom: 16, pitch: 58, bearing: -15, duration: 1800 });
@@ -75,6 +101,7 @@ export function BranchMap3D() {
 
   const closeDetail = () => {
     setSelected(null);
+    setShipments([]);
     setDetailOpen(false);
     setDayViewOpen(false);
   };
@@ -130,7 +157,12 @@ export function BranchMap3D() {
 
       for (const t of types) {
         map.addImage(`pin-${t}`, makePinImage(typeColor[t], "#ffffff"), { pixelRatio: 4 });
-        map.addImage(`pin-selected-${t}`, makePinImage(typeColor[t], "#b89b68"), { pixelRatio: 4 });
+        map.addImage(`pin-selected-${t}`, makePinImage(typeColor[t], "#d7d7d7"), { pixelRatio: 4 });
+      }
+      // หมุดสีตามผลงาน — เกินเป้า (เขียว) / ต่ำกว่าเป้า (ส้ม)
+      for (const [k, col] of Object.entries(perfColor)) {
+        map.addImage(`pin-${k}`, makePinImage(col, "#ffffff"), { pixelRatio: 4 });
+        map.addImage(`pin-selected-${k}`, makePinImage(col, "#d7d7d7"), { pixelRatio: 4 });
       }
 
       map.addLayer({
@@ -198,22 +230,52 @@ export function BranchMap3D() {
     if (!map) return;
     const apply = () => {
       if (!map.getLayer("branch-pin")) return;
-      const typeFilter = activeType === "all" ? null : (["==", ["get", "type"], activeType] as maplibregl.FilterSpecification);
-      map.setFilter("branch-pin", typeFilter);
-      map.setFilter("branch-label", typeFilter);
+      const parts: unknown[] = [];
+      if (activeType !== "all") parts.push(["==", ["get", "type"], activeType]);
+      if (underTargetOnly) parts.push(["==", ["get", "under"], true]);
+      const baseFilter = (parts.length === 0 ? null : parts.length === 1 ? parts[0] : ["all", ...parts]) as maplibregl.FilterSpecification | null;
+      map.setFilter("branch-pin", baseFilter);
+      map.setFilter("branch-label", baseFilter);
       const selFilter = ["==", ["get", "store"], selected ?? "__none__"] as maplibregl.FilterSpecification;
-      map.setFilter("branch-pin-selected", typeFilter ? (["all", selFilter, typeFilter] as maplibregl.FilterSpecification) : selFilter);
+      map.setFilter("branch-pin-selected", baseFilter ? (["all", selFilter, baseFilter] as maplibregl.FilterSpecification) : selFilter);
     };
     if (map.getLayer("branch-pin")) apply();
     else map.once("idle", apply);
-  }, [activeType, selected]);
+  }, [activeType, selected, underTargetOnly]);
+
+  // สลับสีหมุด: ตามประเภท ↔ ตามผลงาน (เกิน/ต่ำเป้า)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer("branch-pin")) return;
+      const pinExpr: unknown = colorMode === "type"
+        ? ["concat", "pin-", ["get", "type"]]
+        : ["case", ["get", "under"], "pin-under", "pin-over"];
+      const selExpr: unknown = colorMode === "type"
+        ? ["concat", "pin-selected-", ["get", "type"]]
+        : ["case", ["get", "under"], "pin-selected-under", "pin-selected-over"];
+      map.setLayoutProperty("branch-pin", "icon-image", pinExpr as never);
+      map.setLayoutProperty("branch-pin-selected", "icon-image", selExpr as never);
+    };
+    if (map.getLayer("branch-pin")) apply();
+    else map.once("idle", apply);
+  }, [colorMode]);
 
   const resetView = () => {
     closeDetail();
     mapRef.current?.flyTo({ center: BANGKOK_CENTER, zoom: 10.3, pitch: 50, bearing: -12, duration: 1500 });
   };
 
-  const filtered = activeType === "all" ? stores : stores.filter((s) => s.type === activeType);
+  const q = query.trim().toLowerCase();
+  const filtered = stores
+    .filter((s) => activeType === "all" || s.type === activeType)
+    .filter((s) => !underTargetOnly || Number(s.sales) < Number(s.target))
+    .filter((s) => !q || String(s.store).toLowerCase().includes(q) || String(s.location).toLowerCase().includes(q));
+  const underCount = stores.filter((s) => Number(s.sales) < Number(s.target)).length;
+  const overCount = stores.length - underCount;
+  const renoCount = Object.values(storeOps).filter((o) => o.condition === "ปรับปรุงบางส่วน").length;
+  const totalSales = stores.reduce((s, x) => s + Number(x.sales), 0);
 
   const sel = selected ? stores.find((x) => x.store === selected) : null;
   const ops = selected ? storeOps[selected] : null;
@@ -232,6 +294,34 @@ export function BranchMap3D() {
               <Compass size={12} /> มุมเริ่มต้น
             </button>
           </div>
+
+          {/* KPI สรุป */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[
+              { label: "เกินเป้า", value: overCount, icon: <TrendingUp size={12} />, color: "text-emerald-600" },
+              { label: "ต่ำกว่าเป้า", value: underCount, icon: <TrendingDown size={12} />, color: "text-amber-600" },
+              { label: "กำลังปรับปรุง", value: renoCount, icon: <Hammer size={12} />, color: "text-orange-500" },
+              { label: "ยอดรวม/เดือน", value: `฿${(totalSales / 1e6).toFixed(1)}M`, icon: <Wallet size={12} />, color: "text-gold-600" },
+            ].map((k) => (
+              <div key={k.label} className="bg-ivory rounded-xl p-2.5">
+                <span className={k.color}>{k.icon}</span>
+                <p className="text-sm font-bold text-ink tabular-nums mt-1">{k.value}</p>
+                <p className="text-[10px] text-slate-400">{k.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ค้นหาสาขา */}
+          <div className="relative mb-3">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ค้นหาสาขา / ทำเล..."
+              className="w-full h-8 pl-8 pr-2.5 rounded-lg border border-line bg-ivory/60 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:bg-white"
+            />
+          </div>
+
           <div className="flex flex-wrap gap-1.5">
             {["all", ...types].map((t) => (
               <button
@@ -247,6 +337,30 @@ export function BranchMap3D() {
                 {t === "all" ? `ทั้งหมด (${stores.length})` : `${t} (${stores.filter((s) => s.type === t).length})`}
               </button>
             ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <button
+              onClick={() => setUnderTargetOnly((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                underTargetOnly
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : "bg-white text-amber-600 border-amber-200 hover:border-amber-300"
+              )}
+            >
+              <Filter size={11} /> เฉพาะต่ำกว่าเป้า ({underCount})
+            </button>
+            <button
+              onClick={() => setColorMode((m) => (m === "type" ? "perf" : "type"))}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                colorMode === "perf"
+                  ? "bg-ink text-white border-ink"
+                  : "bg-white text-slate-500 border-line hover:border-slate-300"
+              )}
+            >
+              <Layers size={11} /> สี: {colorMode === "type" ? "ตามประเภท" : "ตามผลงาน"}
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2 min-h-0">
@@ -292,13 +406,24 @@ export function BranchMap3D() {
 
         {/* Legend */}
         <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur rounded-xl border border-line shadow-sm px-3.5 py-2.5 space-y-1.5">
-          {types.map((t) => (
-            <div key={t} className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: typeColor[t] }} />
-              <span className="text-[11px] text-slate-600">{t}</span>
-              <span className="text-[11px] text-slate-400 ml-auto pl-3 tabular-nums">{stores.filter((s) => s.type === t).length}</span>
-            </div>
-          ))}
+          {colorMode === "type"
+            ? types.map((t) => (
+                <div key={t} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: typeColor[t] }} />
+                  <span className="text-[11px] text-slate-600">{t}</span>
+                  <span className="text-[11px] text-slate-400 ml-auto pl-3 tabular-nums">{stores.filter((s) => s.type === t).length}</span>
+                </div>
+              ))
+            : [
+                { label: "เกินเป้า", color: perfColor.over, count: overCount },
+                { label: "ต่ำกว่าเป้า", color: perfColor.under, count: underCount },
+              ].map((r) => (
+                <div key={r.label} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: r.color }} />
+                  <span className="text-[11px] text-slate-600">{r.label}</span>
+                  <span className="text-[11px] text-slate-400 ml-auto pl-3 tabular-nums">{r.count}</span>
+                </div>
+              ))}
         </div>
 
         {/* Collapsed side tab — click to slide the detail panel in */}
@@ -404,14 +529,42 @@ export function BranchMap3D() {
                 <p className="text-[10px] text-slate-400 mt-1">เป้า ฿{formatCurrency(Number(sel.target))} · Conversion {sel.conversion}</p>
               </div>
 
+              {/* ลังกำลังส่งมา (จากใบจัดของโกดัง) */}
+              {shipments.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                    <Package size={12} className="text-gold-600" /> ลังกำลังส่งมา ({shipments.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {shipments.map((sh) => (
+                      <div key={sh.code} className="bg-gold-50/60 border border-gold-100 rounded-xl p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gold-700">{sh.code}</p>
+                          <span className="text-[10px] text-slate-400">{sh.items.length} รายการ · {sh.total} ชิ้น</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{sh.items.map((i) => i.name).join(" · ")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Renovation notice */}
               {ops?.renovation && (
-                <div className="flex items-start gap-2.5 bg-amber-50/70 border border-amber-100 rounded-xl p-3">
-                  <Hammer size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-semibold text-amber-700">งานปรับปรุง</p>
-                    <p className="text-xs text-slate-600 mt-0.5">{ops.renovation}</p>
+                <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-3">
+                  <div className="flex items-start gap-2.5">
+                    <Hammer size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-700">งานปรับปรุง</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{ops.renovation}</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => createWorkOrderFor(`ปรับปรุงสาขา: ${ops.renovation}`)}
+                    className="mt-2.5 w-full flex items-center justify-center gap-1.5 h-7 rounded-lg bg-white border border-amber-200 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition-colors"
+                  >
+                    <ClipboardPlus size={12} /> แจ้งเป็นการ์ดงาน
+                  </button>
                 </div>
               )}
 
@@ -465,13 +618,20 @@ export function BranchMap3D() {
               </div>
             </div>
 
-            {/* Deep-dive button */}
-            <div className="p-3 border-t border-line shrink-0">
+            {/* Footer actions */}
+            <div className="p-3 border-t border-line shrink-0 flex gap-2">
+              <button
+                onClick={() => createWorkOrderFor(`งานที่ ${sel.store}`)}
+                className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-line text-slate-600 text-xs font-semibold hover:bg-ivory transition-colors shrink-0"
+                title="สร้างการ์ดงานให้สาขานี้"
+              >
+                <ClipboardPlus size={14} /> การ์ดงาน
+              </button>
               <button
                 onClick={() => setDayViewOpen(true)}
-                className="flex items-center justify-center gap-2 w-full h-9 rounded-xl bg-ink text-white text-xs font-semibold hover:bg-black/85 transition-colors"
+                className="flex items-center justify-center gap-2 flex-1 h-9 rounded-xl bg-ink text-white text-xs font-semibold hover:bg-black/85 transition-colors"
               >
-                <CalendarSearch size={13} /> ดูรายละเอียดวันนี้แบบเต็ม
+                <CalendarSearch size={13} /> ดูรายละเอียดวันนี้
               </button>
             </div>
           </div>
@@ -496,9 +656,13 @@ export function BranchMap3D() {
                 {/* Today KPIs */}
                 <div className="grid grid-cols-3 gap-2.5">
                   {(() => {
-                    const roster = team.map((m, i) => ({ ...m, ...shiftFor(i, m.role) }));
+                    const roster = team.map((m, i) => {
+                      const sft = shiftFor(i, m.role);
+                      const key = `${sel.store}|${m.name}`;
+                      return { ...m, ...sft, isIn: checkedOverride[key] ?? sft.in };
+                    });
                     const working = roster.filter((r) => !r.shift.includes("OFF"));
-                    const checkedIn = working.filter((r) => r.in);
+                    const checkedIn = working.filter((r) => r.isIn);
                     const todayActs = (ops?.activities ?? []).filter((a) => /วันนี้|คืนนี้/.test(a.time));
                     return [
                       { label: "เข้ากะวันนี้", value: `${working.length} คน` },
@@ -519,6 +683,9 @@ export function BranchMap3D() {
                   <div className="rounded-xl border border-line overflow-hidden">
                     {team.map((m, i) => {
                       const sft = shiftFor(i, m.role);
+                      const key = `${sel.store}|${m.name}`;
+                      const isIn = checkedOverride[key] ?? sft.in;
+                      const off = sft.shift.includes("OFF");
                       return (
                         <div key={m.name} className="flex items-center gap-2.5 px-3 py-2 border-b border-line/60 last:border-0 bg-white">
                           <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-[10px] font-bold flex items-center justify-center shrink-0">
@@ -530,14 +697,24 @@ export function BranchMap3D() {
                           </span>
                           <span className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded-full shrink-0",
-                            sft.shift.includes("OFF") ? "bg-slate-100 text-slate-400" : sft.shift.includes("เช้า") ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+                            off ? "bg-slate-100 text-slate-400" : sft.shift.includes("เช้า") ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
                           )}>
                             {sft.shift}
                           </span>
-                          {sft.shift.includes("OFF") ? null : sft.in ? (
-                            <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                          {off ? (
+                            <span className="w-4 shrink-0" />
                           ) : (
-                            <CircleDashed size={14} className="text-slate-300 shrink-0" />
+                            <button
+                              onClick={() => toggleCheck(key, sft.in)}
+                              title={isIn ? "เช็กเอาท์" : "เช็กอิน"}
+                              className="shrink-0 transition-colors"
+                            >
+                              {isIn ? (
+                                <CheckCircle2 size={16} className="text-emerald-500" />
+                              ) : (
+                                <CircleDashed size={16} className="text-slate-300 hover:text-emerald-400" />
+                              )}
+                            </button>
                           )}
                         </div>
                       );

@@ -3,21 +3,36 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Search, X, Box, Layers3, PackageOpen, AlertTriangle, Compass } from "lucide-react";
+import { Search, X, Box, Layers3, PackageOpen, AlertTriangle, Compass, Plus, ClipboardList, Truck, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { warehouseRacks, type WarehouseRack } from "@/lib/mock-retail";
+import { warehouseRacks, stores, type WarehouseRack } from "@/lib/mock-retail";
+import { addShipment } from "@/lib/store-shipments";
+import { useToast } from "@/components/ui/toast";
+
+interface PickItem {
+  key: string;
+  rackId: string;
+  sku: string;
+  name: string;
+  category: string;
+  available: number;
+  qty: number;
+}
+
+const storeNames = stores.filter((s) => s.type === "STORE").map((s) => String(s.store));
 
 const categoryColor: Record<string, string> = {
   "เดนิม": "#3b5b7d",
   "สตรี": "#c98da4",
-  "Accessories": "#b89b68",
+  "Accessories": "#a9aeb5",
   "Lifestyle": "#7d8c6e",
 };
 
 const RACK_CAPACITY_PER_LEVEL = 100;
 
-// world layout
-const RACK_W = 3.6, RACK_D = 1.4, LEVEL_H = 1.15, LEVELS = 3;
+// world layout — tall racks (ปีนบันไดถึงชั้นบน)
+const RACK_W = 3.6, RACK_D = 1.4, LEVEL_H = 1.2, LEVELS = 6;
+const CRATE_H = LEVEL_H * 0.74;
 const ZONE_GAP = 7;
 
 function rackPosition(r: WarehouseRack): [number, number] {
@@ -51,6 +66,36 @@ export function Warehouse3D() {
   const selectedSetterRef = useRef(setSelected);
   selectedSetterRef.current = setSelected;
 
+  const toast = useToast();
+  const [pickList, setPickList] = useState<PickItem[]>([]);
+  const [destStore, setDestStore] = useState(storeNames[0] ?? "");
+
+  const addPick = (rackId: string, slot: { sku: string; name: string; category: string; qty: number }) => {
+    const key = `${rackId}|${slot.sku}`;
+    setPickList((prev) => {
+      if (prev.some((p) => p.key === key)) return prev;
+      return [...prev, { key, rackId, sku: slot.sku, name: slot.name, category: slot.category, available: slot.qty, qty: Math.min(slot.qty, 10) }];
+    });
+  };
+  const setPickQty = (key: string, v: number) =>
+    setPickList((prev) => prev.map((p) => (p.key === key ? { ...p, qty: Math.max(1, Math.min(p.available, v || 1)) } : p)));
+  const removePick = (key: string) => setPickList((prev) => prev.filter((p) => p.key !== key));
+  const confirmPick = () => {
+    if (!pickList.length || !destStore) return;
+    const total = pickList.reduce((s, p) => s + p.qty, 0);
+    const code = `PICK-${Date.now().toString().slice(-5)}`;
+    addShipment({
+      code,
+      store: destStore,
+      items: pickList.map((p) => ({ sku: p.sku, name: p.name, qty: p.qty })),
+      total,
+      ts: Date.now(),
+    });
+    toast(`${code} → ${destStore}: ${pickList.length} รายการ ${total} ชิ้น — ส่งให้โกดังหยิบลงลังแล้ว`);
+    setPickList([]);
+  };
+  const inPick = (rackId: string, sku: string) => pickList.some((p) => p.key === `${rackId}|${sku}`);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -60,7 +105,7 @@ export function Warehouse3D() {
     scene.fog = new THREE.Fog("#f2eee6", 55, 95);
 
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
-    camera.position.set(0, 16, 26);
+    camera.position.set(0, 22, 34);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -73,8 +118,8 @@ export function Warehouse3D() {
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI / 2.05;
     controls.minDistance = 5;
-    controls.maxDistance = 60;
-    controls.target.set(0, 1, 0);
+    controls.maxDistance = 76;
+    controls.target.set(0, 2.6, 0);
 
     // lights
     scene.add(new THREE.HemisphereLight("#ffffff", "#d8d0c0", 0.9));
@@ -134,7 +179,13 @@ export function Warehouse3D() {
     const poleMat = new THREE.MeshStandardMaterial({ color: "#8a8276", roughness: 0.6, metalness: 0.4 });
     const shelfGeo = new THREE.BoxGeometry(RACK_W, 0.08, RACK_D);
     const shelfMat = new THREE.MeshStandardMaterial({ color: "#a39a8a", roughness: 0.7, metalness: 0.3 });
-    const boxGeo = new THREE.BoxGeometry(0.72, 0.62, 0.72);
+    // ลังทึบใบใหญ่ — 1 ใบต่อ slot, สีตามหมวด (ไม่เห็นของข้างใน)
+    const crateGeo = new THREE.BoxGeometry(1, 1, 1);
+    const crateMats: Record<string, THREE.MeshStandardMaterial> = {};
+    for (const [cat, col] of Object.entries(categoryColor)) {
+      crateMats[cat] = new THREE.MeshStandardMaterial({ color: col, roughness: 0.88, metalness: 0.04 });
+    }
+    const crateFallback = new THREE.MeshStandardMaterial({ color: "#9a9183", roughness: 0.88 });
 
     const rackGroups = new Map<string, THREE.Group>();
 
@@ -160,21 +211,20 @@ export function Warehouse3D() {
         shelf.receiveShadow = true;
         g.add(shelf);
 
-        // boxes per slot — count scales with qty
-        let bi = 0;
-        for (const slot of slots) {
-          const boxes = Math.max(slot.qty > 0 ? 1 : 0, Math.min(4, Math.ceil(slot.qty / 30)));
-          const mat = new THREE.MeshStandardMaterial({
-            color: categoryColor[slot.category] ?? "#9a9183",
-            roughness: 0.8,
-          });
-          for (let b = 0; b < boxes && bi < 4; b++, bi++) {
-            const box = new THREE.Mesh(boxGeo, mat);
-            box.position.set(-RACK_W / 2 + 0.55 + bi * 0.84, li * LEVEL_H + 0.42, 0);
-            box.castShadow = true;
-            g.add(box);
-          }
-        }
+        // ลังใหญ่ 1 ใบต่อ slot ที่มีของ — เรียงบนชั้น
+        const filled = slots.filter((s) => s.qty > 0);
+        const n = filled.length;
+        filled.forEach((slot, si) => {
+          const crate = new THREE.Mesh(crateGeo, crateMats[slot.category] ?? crateFallback);
+          const slotW = (RACK_W - 0.4) / n;
+          const cw = Math.min(slotW - 0.16, 1.6);
+          const cx = -RACK_W / 2 + 0.2 + slotW * (si + 0.5);
+          crate.scale.set(cw, CRATE_H, RACK_D * 0.74);
+          crate.position.set(cx, li * LEVEL_H + 0.1 + CRATE_H / 2, 0);
+          crate.castShadow = true;
+          crate.receiveShadow = true;
+          g.add(crate);
+        });
       });
 
       // rack id label
@@ -218,10 +268,46 @@ export function Warehouse3D() {
       }
     }
 
+    // rolling ladders — คลังสูง ต้องปีนถึงชั้นบน
+    const ladderMat = new THREE.MeshStandardMaterial({ color: "#8a8276", roughness: 0.6, metalness: 0.35 });
+    const makeLadder = (x: number, z: number, rotY: number) => {
+      const lad = new THREE.Group();
+      const h = LEVELS * LEVEL_H * 0.92;
+      for (const sx of [-0.42, 0.42]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.08), ladderMat);
+        rail.position.set(sx, h / 2, 0);
+        rail.castShadow = true;
+        lad.add(rail);
+      }
+      const rungN = 9;
+      for (let i = 1; i <= rungN; i++) {
+        const rung = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.05, 0.05), ladderMat);
+        rung.position.set(0, (h / (rungN + 1)) * i, 0);
+        lad.add(rung);
+      }
+      const plat = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.6), ladderMat);
+      plat.position.set(0, h, 0.32);
+      plat.castShadow = true;
+      lad.add(plat);
+      for (const wx of [-0.42, 0.42]) for (const wz of [-0.28, 0.28]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.08, 12), ladderMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.1, wz);
+        lad.add(wheel);
+      }
+      lad.position.set(x, 0, z);
+      lad.rotation.y = rotY;
+      scene.add(lad);
+    };
+    makeLadder(5, -2, 0);
+    makeLadder(5, 2.6, 0);
+    makeLadder(-10.5, -2, 0);
+    makeLadder(-10.5, 2.6, 0);
+
     // selection highlight ring
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(2.4, 2.7, 48),
-      new THREE.MeshBasicMaterial({ color: "#b89b68", side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: "#d7d7d7", side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.03;
@@ -237,8 +323,8 @@ export function Warehouse3D() {
       if (!g) return;
       ring.visible = true;
       ring.position.set(g.position.x, 0.03, g.position.z);
-      desired.target.set(g.position.x, 1.2, g.position.z);
-      desired.pos.set(g.position.x + 5.5, 5.5, g.position.z + 7.5);
+      desired.target.set(g.position.x, 3.4, g.position.z);
+      desired.pos.set(g.position.x + 6.5, 9, g.position.z + 10);
       desired.active = true;
     };
     apiRef.current = {
@@ -466,12 +552,67 @@ export function Warehouse3D() {
                               }}
                             />
                           </div>
+                          {s.qty > 0 && (
+                            <button
+                              onClick={() => addPick(sel.id, s)}
+                              disabled={inPick(sel.id, s.sku)}
+                              className="mt-2 w-full flex items-center justify-center gap-1 h-7 rounded-lg text-xs font-medium transition-colors bg-gold-50 text-gold-700 hover:bg-gold-100 disabled:opacity-50 disabled:cursor-default"
+                            >
+                              <Plus size={12} /> {inPick(sel.id, s.sku) ? "อยู่ในใบจัดของแล้ว" : "ใส่ใบจัดของ"}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ใบจัดของ (pick list) — เลือกของส่งหน้าสาขา */}
+        {pickList.length > 0 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[440px] max-w-[calc(100%-1.5rem)] bg-white/[0.98] backdrop-blur rounded-2xl border border-line shadow-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line">
+              <ClipboardList size={15} className="text-gold-600" />
+              <p className="text-sm font-bold text-ink flex-1">ใบจัดของส่งสาขา · {pickList.length} รายการ</p>
+              <button onClick={() => setPickList([])} className="text-xs text-slate-400 hover:text-red-500">ล้าง</button>
+            </div>
+            <div className="max-h-[176px] overflow-y-auto p-2 space-y-1.5">
+              {pickList.map((p) => (
+                <div key={p.key} className="flex items-center gap-2 bg-ivory/60 rounded-lg px-2.5 py-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: categoryColor[p.category] }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-slate-800 truncate">{p.name}</span>
+                    <span className="block text-[10px] text-slate-400">{p.rackId} · {p.sku} · เหลือ {p.available}</span>
+                  </span>
+                  <input
+                    type="number" min={1} max={p.available} value={p.qty}
+                    onChange={(e) => setPickQty(p.key, Number(e.target.value))}
+                    className="w-14 h-7 rounded-md border border-line text-center text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-gold-500"
+                  />
+                  <button onClick={() => removePick(p.key)} className="text-slate-400 hover:text-red-500 shrink-0">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2.5 border-t border-line bg-ivory/40">
+              <Truck size={14} className="text-slate-400 shrink-0" />
+              <select
+                value={destStore}
+                onChange={(e) => setDestStore(e.target.value)}
+                className="h-8 flex-1 min-w-0 rounded-lg border border-line bg-white text-xs text-slate-700 px-2 focus:outline-none focus:ring-2 focus:ring-gold-500"
+              >
+                {storeNames.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <button
+                onClick={confirmPick}
+                className="h-8 px-3.5 rounded-lg bg-gold-600 text-white text-xs font-semibold hover:bg-gold-700 transition-colors shrink-0"
+              >
+                ยืนยันจัดของ
+              </button>
             </div>
           </div>
         )}

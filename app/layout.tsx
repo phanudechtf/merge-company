@@ -11,8 +11,8 @@ const prompt = Prompt({
 });
 
 export const metadata: Metadata = {
-  title: "MERGE HR Suite",
-  description: "HR Management System — SENSE ASIA CORPORATION",
+  title: "MERGE Workspace",
+  description: "ระบบบริหารองค์กรครบวงจร — SENSE ASIA CORPORATION",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

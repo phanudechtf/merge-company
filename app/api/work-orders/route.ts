@@ -8,8 +8,7 @@ export async function GET(req: NextRequest) {
   if (deptId) data = data.filter((w) => w.assigneeDeptId === deptId);
   const stats = {
     total: data.length,
-    pendingApproval: data.filter((w) => w.status === "pending_approval").length,
-    approved: data.filter((w) => w.status === "approved").length,
+    backlog: data.filter((w) => w.status === "backlog").length,
     inProgress: data.filter((w) => w.status === "in_progress").length,
     done: data.filter((w) => w.status === "done").length,
   };
