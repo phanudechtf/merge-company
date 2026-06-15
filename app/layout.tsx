@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Prompt } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -18,7 +19,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th" className={`h-full ${inter.variable} ${prompt.variable}`}>
-      <body className="h-full bg-ivory text-[#111111]">{children}</body>
+      <body className="h-full bg-ivory text-[#111111]">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
