@@ -7,8 +7,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   MapPin, Phone, Clock, Compass, X, Users, Ruler, CalendarDays,
   Hammer, Moon, TrendingUp, TrendingDown, UserCircle2, CalendarSearch, CheckCircle2, CircleDashed,
-  ChevronLeft, Package, ClipboardPlus, Filter, Search, Layers, Wallet,
+  ChevronLeft, Package, ClipboardPlus, Filter, Search, Layers, Wallet, Plus,
 } from "lucide-react";
+import type { StoreActivity } from "@/lib/mock-retail";
 import { cn, formatCurrency } from "@/lib/utils";
 import { stores, storeOps, storeTeam } from "@/lib/mock-retail";
 import { getShipmentsFor, type Shipment } from "@/lib/store-shipments";
@@ -26,6 +27,31 @@ const typeColor: Record<string, string> = {
 const types = ["STORE", "Central Dept", "Pop-Up"];
 
 const perfColor: Record<string, string> = { over: "#10b981", under: "#f59e0b" };
+
+// ===== Activity scheduler (3D branch panel) =====
+// "today" ในเดโม = พฤ. 11 มิ.ย. 2569 (ตรงกับ day-view header)
+const DAY_OPTS = [
+  { value: "d0", label: "วันนี้ · พฤ. 11 มิ.ย.", prefix: "วันนี้", nightPrefix: "คืนนี้", match: ["วันนี้", "คืนนี้", "11 มิ.ย."] },
+  { value: "d1", label: "พรุ่งนี้ · ศ. 12 มิ.ย.", prefix: "พรุ่งนี้", nightPrefix: "พรุ่งนี้", match: ["พรุ่งนี้", "12 มิ.ย."] },
+  { value: "d2", label: "ส. 13 มิ.ย.", prefix: "ส. 13 มิ.ย.", nightPrefix: "ส. 13 มิ.ย.", match: ["13 มิ.ย."] },
+  { value: "d3", label: "อา. 14 มิ.ย.", prefix: "อา. 14 มิ.ย.", nightPrefix: "อา. 14 มิ.ย.", match: ["14 มิ.ย."] },
+  { value: "d4", label: "จ. 15 มิ.ย.", prefix: "จ. 15 มิ.ย.", nightPrefix: "จ. 15 มิ.ย.", match: ["15 มิ.ย."] },
+  { value: "d5", label: "อ. 16 มิ.ย.", prefix: "อ. 16 มิ.ย.", nightPrefix: "อ. 16 มิ.ย.", match: ["16 มิ.ย."] },
+  { value: "d6", label: "พ. 17 มิ.ย.", prefix: "พ. 17 มิ.ย.", nightPrefix: "พ. 17 มิ.ย.", match: ["17 มิ.ย."] },
+];
+const SLOT_OPTS = [
+  { value: "09:00", night: false }, { value: "11:00", night: false }, { value: "13:00", night: false },
+  { value: "14:00", night: false }, { value: "16:00", night: false }, { value: "18:00", night: false },
+  { value: "20:00", night: false }, { value: "22:00", night: true }, { value: "22:30", night: true },
+];
+const TEAM_OPTS = ["VM", "สต๊อก", "Interior", "Marketing", "ขาย", "ซ่อมบำรุง"];
+
+// แปลง time string → key "day|HH:MM" สำหรับเช็คชนเวลา (ใช้กับทั้ง mock เดิมและที่เพิ่มใหม่)
+function actSlotKey(time: string): string {
+  const day = DAY_OPTS.find((d) => d.match.some((m) => time.includes(m)))?.value ?? "?";
+  const t = time.match(/(\d{1,2}:\d{2})/)?.[1] ?? "?";
+  return `${day}|${t}`;
+}
 
 // pin images drawn on canvas — symbol layers are NOT depth-occluded by 3D buildings (circles are)
 function makePinImage(color: string, ring: string) {
@@ -69,11 +95,18 @@ export function BranchMap3D() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [dayViewOpen, setDayViewOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"overview" | "team" | "shipments" | "actions">("overview");
   const [underTargetOnly, setUnderTargetOnly] = useState(false);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [checkedOverride, setCheckedOverride] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [colorMode, setColorMode] = useState<"type" | "perf">("type");
+  const [addedActs, setAddedActs] = useState<Record<string, StoreActivity[]>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [fDay, setFDay] = useState(DAY_OPTS[0].value);
+  const [fSlot, setFSlot] = useState("");
+  const [fTeam, setFTeam] = useState(TEAM_OPTS[0]);
+  const [fNote, setFNote] = useState("");
 
   const router = useRouter();
   const toast = useToast();
@@ -92,6 +125,7 @@ export function BranchMap3D() {
     setSelected(storeName);
     setShipments(getShipmentsFor(storeName)); // ลังที่กำลังส่งมาสาขานี้
     setDetailOpen(false); // show only the side tab — details open on demand
+    setDetailTab("overview");
     if (fly) {
       map.flyTo({ center: [Number(s.lng), Number(s.lat)], zoom: 16, pitch: 58, bearing: -15, duration: 1800 });
     }
@@ -279,6 +313,21 @@ export function BranchMap3D() {
 
   const sel = selected ? stores.find((x) => x.store === selected) : null;
   const ops = selected ? storeOps[selected] : null;
+  const acts: StoreActivity[] = [...(ops?.activities ?? []), ...(selected ? addedActs[selected] ?? [] : [])];
+  const bookedSlots = new Set(acts.map((a) => actSlotKey(a.time)));
+  const slotTaken = (slotValue: string) => bookedSlots.has(`${fDay}|${slotValue}`);
+
+  const addActivity = () => {
+    if (!selected || !fSlot || !fNote.trim() || slotTaken(fSlot)) return;
+    const dayOpt = DAY_OPTS.find((d) => d.value === fDay)!;
+    const slot = SLOT_OPTS.find((s) => s.value === fSlot)!;
+    const prefix = slot.night ? dayOpt.nightPrefix : dayOpt.prefix;
+    const newAct: StoreActivity = { time: `${prefix} ${fSlot}`, team: fTeam, note: fNote.trim(), night: slot.night };
+    setAddedActs((prev) => ({ ...prev, [selected]: [...(prev[selected] ?? []), newAct] }));
+    toast(`เพิ่มกิจกรรม ${prefix} ${fSlot} ให้ ${selected}`);
+    setFSlot(""); setFNote(""); setAddOpen(false);
+  };
+
   const team = selected ? storeTeam[selected] ?? [] : [];
   const selPct = sel ? Math.round((Number(sel.sales) / Number(sel.target)) * 100) : 0;
 
@@ -486,90 +535,93 @@ export function BranchMap3D() {
                   </span>
                 )}
               </div>
+              <div className="grid grid-cols-4 gap-1 mt-3 rounded-xl bg-ivory p-1">
+                {[
+                  ["overview", "ภาพรวม"],
+                  ["team", "ทีม"],
+                  ["shipments", "ของส่ง"],
+                  ["actions", "งาน"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setDetailTab(key as typeof detailTab)}
+                    className={cn(
+                      "h-7 rounded-lg text-[10px] font-semibold transition-colors",
+                      detailTab === key ? "bg-white text-ink shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Card body */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-              {/* Quick facts */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-ivory rounded-xl p-2.5">
-                  <Users size={13} className="text-gold-600 mb-1" />
-                  <p className="text-sm font-bold text-ink tabular-nums">{ops?.staff ?? "—"}</p>
-                  <p className="text-[10px] text-slate-400">พนักงาน</p>
-                </div>
-                <div className="bg-ivory rounded-xl p-2.5">
-                  <Ruler size={13} className="text-gold-600 mb-1" />
-                  <p className="text-sm font-bold text-ink tabular-nums">{ops?.areaSqm ?? "—"}</p>
-                  <p className="text-[10px] text-slate-400">ตร.ม.</p>
-                </div>
-                <div className="bg-ivory rounded-xl p-2.5">
-                  <CalendarDays size={13} className="text-gold-600 mb-1" />
-                  <p className="text-sm font-bold text-ink tabular-nums">{ops?.opened ?? "—"}</p>
-                  <p className="text-[10px] text-slate-400">เปิดปี</p>
-                </div>
-              </div>
-
-              {/* Sales vs target */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                    <TrendingUp size={12} className="text-gold-600" /> ยอดขายเดือนนี้
-                  </p>
-                  <p className="text-xs tabular-nums">
-                    <span className="font-bold text-ink">฿{formatCurrency(Number(sel.sales))}</span>
-                    <span className={selPct >= 100 ? "text-emerald-600" : "text-amber-600"}> · {selPct}%</span>
-                  </p>
-                </div>
-                <div className="h-2 bg-ivory rounded-full overflow-hidden">
-                  <div
-                    className={cn("h-full rounded-full", selPct >= 100 ? "bg-emerald-500" : "bg-amber-400")}
-                    style={{ width: `${Math.min(selPct, 100)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">เป้า ฿{formatCurrency(Number(sel.target))} · Conversion {sel.conversion}</p>
-              </div>
-
-              {/* ลังกำลังส่งมา (จากใบจัดของโกดัง) */}
-              {shipments.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                    <Package size={12} className="text-gold-600" /> ลังกำลังส่งมา ({shipments.length})
-                  </p>
-                  <div className="space-y-1.5">
-                    {shipments.map((sh) => (
-                      <div key={sh.code} className="bg-gold-50/60 border border-gold-100 rounded-xl p-2.5">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-gold-700">{sh.code}</p>
-                          <span className="text-[10px] text-slate-400">{sh.items.length} รายการ · {sh.total} ชิ้น</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{sh.items.map((i) => i.name).join(" · ")}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Renovation notice */}
-              {ops?.renovation && (
-                <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-3">
-                  <div className="flex items-start gap-2.5">
-                    <Hammer size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-amber-700">งานปรับปรุง</p>
-                      <p className="text-xs text-slate-600 mt-0.5">{ops.renovation}</p>
+              {detailTab === "overview" && (
+                <>
+                  {/* Quick facts */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-ivory rounded-xl p-2.5">
+                      <Users size={13} className="text-gold-600 mb-1" />
+                      <p className="text-sm font-bold text-ink tabular-nums">{ops?.staff ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400">พนักงาน</p>
+                    </div>
+                    <div className="bg-ivory rounded-xl p-2.5">
+                      <Ruler size={13} className="text-gold-600 mb-1" />
+                      <p className="text-sm font-bold text-ink tabular-nums">{ops?.areaSqm ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400">ตร.ม.</p>
+                    </div>
+                    <div className="bg-ivory rounded-xl p-2.5">
+                      <CalendarDays size={13} className="text-gold-600 mb-1" />
+                      <p className="text-sm font-bold text-ink tabular-nums">{ops?.opened ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400">เปิดปี</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => createWorkOrderFor(`ปรับปรุงสาขา: ${ops.renovation}`)}
-                    className="mt-2.5 w-full flex items-center justify-center gap-1.5 h-7 rounded-lg bg-white border border-amber-200 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition-colors"
-                  >
-                    <ClipboardPlus size={12} /> แจ้งเป็นการ์ดงาน
-                  </button>
-                </div>
+
+                  {/* Sales vs target */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                        <TrendingUp size={12} className="text-gold-600" /> ยอดขายเดือนนี้
+                      </p>
+                      <p className="text-xs tabular-nums">
+                        <span className="font-bold text-ink">฿{formatCurrency(Number(sel.sales))}</span>
+                        <span className={selPct >= 100 ? "text-emerald-600" : "text-amber-600"}> · {selPct}%</span>
+                      </p>
+                    </div>
+                    <div className="h-2 bg-ivory rounded-full overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full", selPct >= 100 ? "bg-emerald-500" : "bg-amber-400")}
+                        style={{ width: `${Math.min(selPct, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">เป้า ฿{formatCurrency(Number(sel.target))} · Conversion {sel.conversion}</p>
+                  </div>
+
+                  {/* Renovation notice */}
+                  {ops?.renovation && (
+                    <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-3">
+                      <div className="flex items-start gap-2.5">
+                        <Hammer size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-amber-700">งานปรับปรุง</p>
+                          <p className="text-xs text-slate-600 mt-0.5">{ops.renovation}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => createWorkOrderFor(`ปรับปรุงสาขา: ${ops.renovation}`)}
+                        className="mt-2.5 w-full flex items-center justify-center gap-1.5 h-7 rounded-lg bg-white border border-amber-200 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition-colors"
+                      >
+                        <ClipboardPlus size={12} /> แจ้งเป็นการ์ดงาน
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Team roster */}
-              <div>
+              {detailTab === "team" && (
+                <div>
                 <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
                   <UserCircle2 size={12} className="text-gold-600" /> ทีมประจำสาขา
                 </p>
@@ -593,12 +645,142 @@ export function BranchMap3D() {
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Activities timeline */}
-              <div>
-                <p className="text-xs font-semibold text-slate-600 mb-2">กิจกรรม & งานที่กำลังจะถึง</p>
+              {detailTab === "shipments" && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                    <Package size={12} className="text-gold-600" /> ลังกำลังส่งมา ({shipments.length})
+                  </p>
+                  {shipments.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-line bg-ivory/60 py-8 text-center">
+                      <Package size={20} className="mx-auto text-slate-300" />
+                      <p className="mt-2 text-xs text-slate-400">ยังไม่มี shipment กำลังส่งเข้าสาขานี้</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {shipments.map((sh) => (
+                        <div key={sh.code} className="bg-gold-50/60 border border-gold-100 rounded-xl p-2.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-gold-700">{sh.code}</p>
+                            <span className="text-[10px] text-slate-400">{sh.items.length} รายการ · {sh.total} ชิ้น</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{sh.items.map((i) => i.name).join(" · ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === "actions" && (
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { label: "แจ้งซ่อม / งานสาขา", title: `แจ้งซ่อมที่ ${sel.store}`, icon: <Hammer size={14} /> },
+                    { label: "ขอเติม Stock", title: `ขอเติม stock ให้ ${sel.store}`, icon: <Package size={14} /> },
+                    { label: "ตรวจ VM / Display", title: `ตรวจ VM ที่ ${sel.store}`, icon: <Layers size={14} /> },
+                    { label: "ติดตามทีมหน้าร้าน", title: `ติดตามทีมหน้าร้าน ${sel.store}`, icon: <Users size={14} /> },
+                  ].map((a) => (
+                    <button
+                      key={a.label}
+                      onClick={() => createWorkOrderFor(a.title)}
+                      className="flex items-center gap-3 rounded-xl border border-line bg-white p-3 text-left hover:border-gold-300 hover:bg-gold-50/40 transition-colors"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ivory text-gold-600">{a.icon}</span>
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">{a.label}</span>
+                        <span className="block text-[11px] text-slate-400">สร้างเป็นการ์ดงานและส่งต่อแผนกที่เกี่ยวข้อง</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {(detailTab === "overview" || detailTab === "actions") && (
+                <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-600">กิจกรรม & งานที่กำลังจะถึง</p>
+                  <button
+                    onClick={() => setAddOpen((v) => !v)}
+                    className={cn(
+                      "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors",
+                      addOpen ? "bg-ink text-white" : "border border-line text-slate-500 hover:border-gold-300 hover:bg-gold-50/40"
+                    )}
+                  >
+                    <Plus size={12} /> เพิ่มกิจกรรม
+                  </button>
+                </div>
+
+                {addOpen && (
+                  <div className="mb-3 rounded-xl border border-line bg-ivory/60 p-3 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">วัน</label>
+                        <select
+                          value={fDay}
+                          onChange={(e) => setFDay(e.target.value)}
+                          className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-gold-400 focus:outline-none"
+                        >
+                          {DAY_OPTS.map((d) => (
+                            <option key={d.value} value={d.value}>{d.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">เวลา</label>
+                        <select
+                          value={fSlot}
+                          onChange={(e) => setFSlot(e.target.value)}
+                          className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-gold-400 focus:outline-none"
+                        >
+                          <option value="">เลือกเวลา…</option>
+                          {SLOT_OPTS.map((s) => {
+                            const taken = slotTaken(s.value);
+                            return (
+                              <option key={s.value} value={s.value} disabled={taken}>
+                                {s.value}{s.night ? " (กลางคืน)" : ""}{taken ? " — จองแล้ว" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-400 mb-1">ทีม</label>
+                      <select
+                        value={fTeam}
+                        onChange={(e) => setFTeam(e.target.value)}
+                        className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-gold-400 focus:outline-none"
+                      >
+                        {TEAM_OPTS.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-400 mb-1">รายละเอียด</label>
+                      <input
+                        value={fNote}
+                        onChange={(e) => setFNote(e.target.value)}
+                        placeholder="เช่น เปลี่ยนดิสเพลย์หน้าต่าง"
+                        className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-700 placeholder:text-slate-300 focus:border-gold-400 focus:outline-none"
+                      />
+                    </div>
+                    {fSlot && slotTaken(fSlot) && (
+                      <p className="text-[10px] text-amber-600">ช่วงเวลานี้มีทีมจองแล้ว เลือกเวลาอื่น</p>
+                    )}
+                    <button
+                      onClick={addActivity}
+                      disabled={!fSlot || !fNote.trim() || slotTaken(fSlot)}
+                      className="w-full rounded-lg bg-ink py-2 text-xs font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      เพิ่มลงตาราง
+                    </button>
+                  </div>
+                )}
+
                 <div className="space-y-2.5">
-                  {(ops?.activities ?? []).map((a, i) => (
+                  {acts.map((a, i) => (
                     <div key={i} className="flex items-start gap-2.5">
                       <span className={cn(
                         "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
@@ -616,6 +798,7 @@ export function BranchMap3D() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
 
             {/* Footer actions */}
@@ -663,7 +846,7 @@ export function BranchMap3D() {
                     });
                     const working = roster.filter((r) => !r.shift.includes("OFF"));
                     const checkedIn = working.filter((r) => r.isIn);
-                    const todayActs = (ops?.activities ?? []).filter((a) => /วันนี้|คืนนี้/.test(a.time));
+                    const todayActs = acts.filter((a) => /วันนี้|คืนนี้/.test(a.time));
                     return [
                       { label: "เข้ากะวันนี้", value: `${working.length} คน` },
                       { label: "เช็กอินแล้ว", value: `${checkedIn.length} คน` },
@@ -730,7 +913,7 @@ export function BranchMap3D() {
                 <div>
                   <p className="text-xs font-semibold text-slate-600 mb-2">ตารางงาน & อีเวนต์</p>
                   <div className="space-y-2.5">
-                    {(ops?.activities ?? []).map((a, i) => (
+                    {acts.map((a, i) => (
                       <div key={i} className={cn(
                         "flex items-start gap-2.5 rounded-xl p-3",
                         /วันนี้|คืนนี้/.test(a.time) ? "bg-gold-50/60 border border-gold-100" : "bg-ivory"
