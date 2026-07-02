@@ -78,6 +78,7 @@ const menuGroups = [
       { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={16} /> },
       { label: "การ์ดงาน", href: "/work-orders", icon: <ClipboardList size={16} /> },
       { label: "ภาพรวมระบบ", href: "/overview", icon: <Workflow size={16} /> },
+      { label: "Flow บริษัท", href: "/company-flow", icon: <Network size={16} /> },
     ],
   },
   {

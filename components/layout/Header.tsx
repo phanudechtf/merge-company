@@ -23,6 +23,7 @@ interface HeaderProps {
 const customPages = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "การ์ดงาน", href: "/work-orders" },
+  { label: "Flow บริษัท", href: "/company-flow" },
   { label: "พนักงาน", href: "/employees" },
   { label: "ผังองค์กร", href: "/org-chart" },
   { label: "ตำแหน่งงาน", href: "/positions" },

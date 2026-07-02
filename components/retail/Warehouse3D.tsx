@@ -35,6 +35,25 @@ const RACK_W = 3.6, RACK_D = 1.4, LEVEL_H = 1.2, LEVELS = 6;
 const CRATE_H = LEVEL_H * 0.74;
 const ZONE_GAP = 7;
 
+type RackStatus = "empty" | "low" | "full" | "normal";
+
+function rackMetrics(r: WarehouseRack) {
+  const slots = r.levels.flat();
+  const qty = slots.reduce((s, x) => s + x.qty, 0);
+  const filled = slots.filter((s) => s.qty > 0);
+  const low = slots.filter((s) => s.qty > 0 && s.qty < 20).length;
+  const used = r.levels.filter((l) => l.some((x) => x.qty > 0)).length;
+  const status: RackStatus = filled.length === 0 ? "empty" : low > 0 ? "low" : used >= LEVELS ? "full" : "normal";
+  return { qty, filled, low, used, status };
+}
+
+const rackStatusTone = {
+  empty: { label: "ว่าง", className: "bg-slate-100 text-slate-400", color: "#cbd5e1" },
+  low: { label: "ใกล้หมด", className: "bg-amber-100 text-amber-700", color: "#f59e0b" },
+  full: { label: "เต็ม", className: "bg-emerald-100 text-emerald-700", color: "#10b981" },
+  normal: { label: "ปกติ", className: "bg-blue-100 text-blue-700", color: "#3b82f6" },
+} as const;
+
 function rackPosition(r: WarehouseRack): [number, number] {
   const baseX = r.zone === "A" ? -ZONE_GAP : ZONE_GAP;
   const x = baseX + (r.col - 1) * (RACK_W + 1.2);
@@ -62,6 +81,7 @@ export function Warehouse3D() {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<{ focusRack: (id: string | null) => void } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [rackTab, setRackTab] = useState<"stock" | "pick" | "movement" | "alerts">("stock");
   const [query, setQuery] = useState("");
   const selectedSetterRef = useRef(setSelected);
   selectedSetterRef.current = setSelected;
@@ -313,6 +333,14 @@ export function Warehouse3D() {
     ring.position.y = 0.03;
     ring.visible = false;
     scene.add(ring);
+    const hoverRing = new THREE.Mesh(
+      new THREE.RingGeometry(2.05, 2.22, 48),
+      new THREE.MeshBasicMaterial({ color: "#111111", side: THREE.DoubleSide, transparent: true, opacity: 0.22 })
+    );
+    hoverRing.rotation.x = -Math.PI / 2;
+    hoverRing.position.y = 0.04;
+    hoverRing.visible = false;
+    scene.add(hoverRing);
 
     // camera tween targets
     const desired = { target: new THREE.Vector3(0, 1, 0), pos: camera.position.clone(), active: false };
@@ -335,23 +363,40 @@ export function Warehouse3D() {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let downAt = 0;
-    renderer.domElement.addEventListener("pointerdown", () => { downAt = Date.now(); });
-    renderer.domElement.addEventListener("pointerup", (ev) => {
-      if (Date.now() - downAt > 250) return; // drag, not click
+    const rackAtPointer = (ev: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObjects([...rackGroups.values()], true);
-      let rackId: string | null = null;
-      if (hits[0]) {
-        let o: THREE.Object3D | null = hits[0].object;
-        while (o && !o.userData.rackId) o = o.parent;
-        rackId = (o?.userData.rackId as string) ?? null;
+      if (!hits[0]) return null;
+      let o: THREE.Object3D | null = hits[0].object;
+      while (o && !o.userData.rackId) o = o.parent;
+      const rackId = (o?.userData.rackId as string) ?? null;
+      const group = rackId ? rackGroups.get(rackId) ?? null : null;
+      return { rackId, group };
+    };
+    const onPointerDown = () => { downAt = Date.now(); };
+    const onPointerMove = (ev: PointerEvent) => {
+      const hit = rackAtPointer(ev);
+      if (!hit?.rackId || !hit.group) {
+        hoverRing.visible = false;
+        renderer.domElement.style.cursor = "";
+        return;
       }
+      hoverRing.visible = true;
+      hoverRing.position.set(hit.group.position.x, 0.04, hit.group.position.z);
+      renderer.domElement.style.cursor = "pointer";
+    };
+    const onPointerUp = (ev: PointerEvent) => {
+      if (Date.now() - downAt > 250) return; // drag, not click
+      const rackId = rackAtPointer(ev)?.rackId ?? null;
       selectedSetterRef.current(rackId);
       focusRack(rackId);
-    });
+    };
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
 
     // resize
     const resize = () => {
@@ -381,6 +426,9 @@ export function Warehouse3D() {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
       controls.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
@@ -390,11 +438,13 @@ export function Warehouse3D() {
 
   const resetView = () => {
     setSelected(null);
+    setRackTab("stock");
     apiRef.current?.focusRack(null);
   };
 
   const pickRack = (id: string) => {
     setSelected(id);
+    setRackTab("stock");
     apiRef.current?.focusRack(id);
   };
 
@@ -415,7 +465,8 @@ export function Warehouse3D() {
       );
 
   const sel = selected ? warehouseRacks.find((r) => r.id === selected) : null;
-  const selQty = sel ? sel.levels.flat().reduce((s, x) => s + x.qty, 0) : 0;
+  const selMetrics = sel ? rackMetrics(sel) : null;
+  const selQty = selMetrics?.qty ?? 0;
 
   return (
     <div className="flex flex-col md:flex-row h-[calc(100dvh-3.5rem)] overflow-hidden">
@@ -454,8 +505,8 @@ export function Warehouse3D() {
         </div>
         <div className="flex-1 overflow-y-auto p-2 min-h-0">
           {filteredRacks.map((r) => {
-            const qty = r.levels.flat().reduce((s, x) => s + x.qty, 0);
-            const skus = r.levels.flat().filter((s) => s.qty > 0);
+            const { qty, filled: skus, status } = rackMetrics(r);
+            const tone = rackStatusTone[status];
             return (
               <button
                 key={r.id}
@@ -472,8 +523,13 @@ export function Warehouse3D() {
                   {r.id}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium text-slate-800 truncate">
-                    {skus.length === 0 ? "ว่าง" : skus.map((s) => s.name).filter((v, i, a) => a.indexOf(v) === i).join(" · ")}
+                  <span className="flex items-center gap-1.5">
+                    <span className="block text-xs font-medium text-slate-800 truncate">
+                      {skus.length === 0 ? "ว่าง" : skus.map((s) => s.name).filter((v, i, a) => a.indexOf(v) === i).join(" · ")}
+                    </span>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold shrink-0", tone.className)}>
+                      {tone.label}
+                    </span>
                   </span>
                   <span className="block text-[10px] text-slate-400">{qty.toLocaleString()} ชิ้น · {skus.length} ช่อง</span>
                 </span>
@@ -509,16 +565,42 @@ export function Warehouse3D() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-slate-400">Zone {sel.zone} · Rack</p>
-                  <h2 className="text-lg font-bold text-ink">{sel.id}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-ink">{sel.id}</h2>
+                    {selMetrics && (
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", rackStatusTone[selMetrics.status].className)}>
+                        {rackStatusTone[selMetrics.status].label}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button onClick={resetView} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0">
                   <X size={16} />
                 </button>
               </div>
               <p className="text-xs text-slate-400 mt-1">{selQty.toLocaleString()} ชิ้นในชั้นวางนี้</p>
+              <div className="grid grid-cols-4 gap-1 mt-3 rounded-xl bg-ivory p-1">
+                {[
+                  ["stock", "Stock"],
+                  ["pick", "Pick"],
+                  ["movement", "Move"],
+                  ["alerts", "Alert"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setRackTab(key as typeof rackTab)}
+                    className={cn(
+                      "h-7 rounded-lg text-[10px] font-semibold transition-colors",
+                      rackTab === key ? "bg-white text-ink shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-              {[...sel.levels].map((slots, i) => ({ slots, level: i })).reverse().map(({ slots, level }) => (
+              {rackTab === "stock" && [...sel.levels].map((slots, i) => ({ slots, level: i })).reverse().map(({ slots, level }) => (
                 <div key={level}>
                   <p className="text-xs font-semibold text-slate-600 mb-2">ชั้นที่ {level + 1} {level === 0 ? "(ล่าง)" : level === LEVELS - 1 ? "(บน)" : ""}</p>
                   {slots.filter((s) => s.qty > 0).length === 0 ? (
@@ -567,6 +649,67 @@ export function Warehouse3D() {
                   )}
                 </div>
               ))}
+              {rackTab === "pick" && (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-line bg-ivory/60 p-3">
+                    <p className="text-xs font-semibold text-slate-700">ใบจัดของจาก rack นี้</p>
+                    <p className="mt-1 text-[11px] text-slate-400">เลือกสินค้าจากแท็บ Stock แล้วกดใส่ใบจัดของ ระบบจะรวมไว้ด้านล่างของจอ</p>
+                  </div>
+                  {pickList.filter((p) => p.rackId === sel.id).length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-line py-10 text-center">
+                      <ClipboardList size={22} className="mx-auto text-slate-300" />
+                      <p className="mt-2 text-xs text-slate-400">ยังไม่มีรายการจาก rack นี้ในใบจัดของ</p>
+                    </div>
+                  ) : (
+                    pickList.filter((p) => p.rackId === sel.id).map((p) => (
+                      <div key={p.key} className="rounded-xl border border-gold-100 bg-gold-50/60 p-3">
+                        <p className="text-xs font-semibold text-slate-800">{p.name}</p>
+                        <p className="mt-1 text-[10px] text-slate-400">{p.sku} · จำนวนจัด {p.qty} จาก {p.available}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {rackTab === "movement" && (
+                <div className="space-y-2.5">
+                  {[
+                    { title: "รับสินค้าเข้า", sub: "PO mock · ตรวจจำนวนแล้ว", time: "วันนี้ 09:20" },
+                    { title: "หยิบออกไป Packing", sub: "ใบจัดของล่าสุด / สาขาปลายทาง", time: "วันนี้ 13:45" },
+                    { title: "Cycle count", sub: `ตรวจนับ ${sel.id} · ไม่พบส่วนต่าง`, time: "เมื่อวาน" },
+                  ].map((m) => (
+                    <div key={m.title} className="flex gap-3 rounded-xl bg-ivory/70 p-3">
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-gold-500" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-slate-800">{m.title}</span>
+                        <span className="block text-[11px] text-slate-500">{m.sub}</span>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">{m.time}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {rackTab === "alerts" && (
+                <div className="space-y-2.5">
+                  {sel.levels.flat().filter((s) => s.qty > 0 && s.qty < 20).length === 0 ? (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-center">
+                      <p className="text-sm font-semibold text-emerald-700">ไม่มี stock alert ใน rack นี้</p>
+                      <p className="mt-1 text-xs text-emerald-600/80">จำนวนสินค้าอยู่ในระดับปกติ</p>
+                    </div>
+                  ) : (
+                    sel.levels.flat().filter((s) => s.qty > 0 && s.qty < 20).map((s) => (
+                      <div key={s.sku} className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-amber-800">{s.name}</p>
+                            <p className="mt-0.5 text-[10px] text-slate-500">{s.sku} · เหลือ {s.qty} ชิ้น · ควรเติม stock</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
